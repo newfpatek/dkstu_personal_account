@@ -1,69 +1,54 @@
-// import React, { useState } from 'react';
+import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { loginRequest } from '../api/auth';
 
-// function LoginForm() {
-//     const [email, setEmail] = useState('');
-//     const [password, setPassword] = useState('');
-//     const [error, setError] = useState('');
+export default function LoginPage() {
+  const navigate = useNavigate();
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [error, setError] = useState('');
 
-//     const handleSubmit = async (e) => {
-//         e.preventDefault();
-        
-//         if (!email || !password) {
-//         setError('Заполните все поля');
-//         return;
-//         }
+  const handleLogin = async (e) => {
+    e.preventDefault();
+    setError('');
 
-//         try {
-//         const response = await fetch('#', {
-//             method: 'POST',
-//             headers: { 'Content-Type': 'application/json' },
-//             body: JSON.stringify({ email, password }),
-//         });
+    try {
+      const response = await loginRequest(email, password);
+      const { access_token, user } = response.data;
 
-//         if (!response.ok) {
-//             throw new Error('Неверный логин или пароль');
-//         }
+      // Сохраняем токен и данные пользователя
+      localStorage.setItem('access_token', access_token);
+      localStorage.setItem('user', JSON.stringify(user));
 
-//         const data = await response.json();
-//         // Сохраняем токен (например, в localStorage)
-//         localStorage.setItem('token', data.token);
-//         setError('');
-//         alert('Вход успешен!');
-        
-//         } catch (err) {
-//         setError(err.message);
-//         }
-//     };
+      // Редирект по роли
+      if (user.role === 'admin') navigate('/admin');
+      else if (user.role === 'teacher') navigate('/teacher');
+      else navigate('/student');
 
-//     return (
-//         <div style={{ maxWidth: 400, margin: '50px auto', padding: '20px', border: '1px solid #ccc' }}>
-//         <h2>Вход в систему</h2>
-//         {error && <p style={{ color: 'red' }}>{error}</p>}
-//         <form onSubmit={handleSubmit}>
-//             <div style={{ marginBottom: '15px' }}>
-//             <label>Email:</label>
-//             <input 
-//                 type="email" 
-//                 value={email} 
-//                 onChange={(e) => setEmail(e.target.value)} 
-//                 style={{ width: '100%', padding: '8px' }}
-//             />
-//             </div>
-//             <div style={{ marginBottom: '15px' }}>
-//             <label>Пароль:</label>
-//             <input 
-//                 type="password" 
-//                 value={password} 
-//                 onChange={(e) => setPassword(e.target.value)} 
-//                 style={{ width: '100%', padding: '8px' }}
-//             />
-//             </div>
-//             <button type="submit" style={{ padding: '10px 20px', cursor: 'pointer' }}>
-//             Войти
-//             </button>
-//         </form>
-//         </div>
-//     );
-// }
+    } catch (err) {
+      setError(err.response?.data?.message || 'Ошибка входа');
+    }
+  };
 
-// export default LoginForm;
+  return (
+    <div>
+      <h1>Вход</h1>
+      <form onSubmit={handleLogin}>
+        <input
+          type="email"
+          placeholder="Email"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+        />
+        <input
+          type="password"
+          placeholder="Пароль"
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+        />
+        {error && <p style={{ color: 'red' }}>{error}</p>}
+        <button type="submit">Войти</button>
+      </form>
+    </div>
+  );
+}
