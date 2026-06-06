@@ -1,0 +1,24 @@
+// 1. Запуск БД
+
+// запуск БД
+docker compose up -d 
+
+// проверка наличия контейнера
+docker ps 
+
+// проверить подключение БД и писать код SQL (должно выводить student_cabinet=#)
+docker exec -it dkstu_personal_account_db psql -U admin -d dkstu_personal_account
+
+// остановка БД
+docker compose down 
+
+// 2. В PostgreSQL
+
+// список всех таблиц
+\dt
+
+// структура таблицы
+\d table_name
+
+// выход
+\q

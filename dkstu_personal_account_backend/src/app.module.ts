@@ -3,13 +3,11 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { AppController } from './app.controller';
 import { AuthModule } from './auth/auth.module';
-import { DashboardController } from './dashboard/dashboard.controller';
 import { DashboardModule } from './dashboard/dashboard.module';
 
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
-    AuthModule,
     TypeOrmModule.forRootAsync({
       imports: [ConfigModule],
       inject: [ConfigService],
@@ -26,10 +24,9 @@ import { DashboardModule } from './dashboard/dashboard.module';
         migrationsRun: true,
       }),
     }),
-
     AuthModule,
     DashboardModule,
   ],
-  controllers: [AppController, DashboardController],
+  controllers: [AppController],
 })
 export class AppModule {}
