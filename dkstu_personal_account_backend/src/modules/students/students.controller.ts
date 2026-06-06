@@ -1,0 +1,151 @@
+import {
+  Controller,
+  Get,
+  Post,
+  Delete,
+  Param,
+  Query,
+  Body,
+  Request,
+  UseGuards,
+  UseInterceptors,
+  UploadedFile,
+} from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { diskStorage } from 'multer';
+import * as path from 'path';
+import * as fs from 'fs';
+import { StudentsService } from './students.service';
+import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
+import { RolesGuard } from '../../auth/guards/roles.guard';
+import { Roles } from '../../auth/decorators/roles.decorator';
+import { Role } from '../../auth/enums/role.enum';
+import { PortfolioCategory } from './enums/portfolio-category.enum';
+
+@Controller('students')
+@UseGuards(JwtAuthGuard, RolesGuard)
+export class StudentsController {
+  constructor(private readonly studentsService: StudentsService) {}
+
+  // ── Student: grades ──────────────────────────────────────────────────────
+
+  @Roles(Role.STUDENT)
+  @Get('me/grades')
+  getMyGrades(
+    @Request() req,
+    @Query('semester') semester?: string,
+    @Query('academicYear') academicYear?: string,
+  ) {
+    return this.studentsService.getGrades(
+      req.user.id,
+      semester ? parseInt(semester, 10) : undefined,
+      academicYear,
+    );
+  }
+
+  @Roles(Role.STUDENT)
+  @Get('me/grades/history')
+  getMyGradesHistory(@Request() req) {
+    return this.studentsService.getGradesHistory(req.user.id);
+  }
+
+  @Roles(Role.STUDENT)
+  @Get('me/gpa')
+  async getMyGpa(@Request() req) {
+    const gpa = await this.studentsService.calculateGpa(req.user.id);
+    return { gpa };
+  }
+
+  @Roles(Role.STUDENT)
+  @Get('me/debts')
+  getMyDebts(@Request() req) {
+    return this.studentsService.getDebts(req.user.id);
+  }
+
+  // ── Student: scholarship ─────────────────────────────────────────────────
+
+  @Roles(Role.STUDENT)
+  @Get('me/scholarship')
+  getMyScholarship(@Request() req) {
+    return this.studentsService.getScholarship(req.user.id);
+  }
+
+  // ── Student: portfolio ───────────────────────────────────────────────────
+
+  @Roles(Role.STUDENT)
+  @Get('me/portfolio')
+  getMyPortfolio(
+    @Request() req,
+    @Query('category') category?: PortfolioCategory,
+  ) {
+    return this.studentsService.getPortfolio(req.user.id, category);
+  }
+
+  @Roles(Role.STUDENT)
+  @Post('me/portfolio')
+  @UseInterceptors(
+    FileInterceptor('file', {
+      storage: diskStorage({
+        destination: (req: any, _file, cb) => {
+          const dir = path.join(
+            process.cwd(),
+            'uploads',
+            'portfolio',
+            req.user.id,
+          );
+          fs.mkdirSync(dir, { recursive: true });
+          cb(null, dir);
+        },
+        filename: (_req, file, cb) => {
+          const unique = `${Date.now()}-${Math.round(Math.random() * 1e9)}`;
+          cb(null, `${unique}${path.extname(file.originalname)}`);
+        },
+      }),
+      limits: { fileSize: 10 * 1024 * 1024 }, // 10 MB
+    }),
+  )
+  addPortfolioItem(
+    @Request() req,
+    @Body() body: { title: string; category: PortfolioCategory; description?: string },
+    @UploadedFile() file?: Express.Multer.File,
+  ) {
+    return this.studentsService.addPortfolioItem(req.user.id, body, file);
+  }
+
+  @Roles(Role.STUDENT)
+  @Delete('me/portfolio/:id')
+  deletePortfolioItem(@Request() req, @Param('id') id: string) {
+    return this.studentsService.deletePortfolioItem(req.user.id, id);
+  }
+
+  // ── Staff / Admin: view any student ──────────────────────────────────────
+
+  @Roles(Role.STAFF, Role.ADMIN)
+  @Get(':id/grades')
+  getStudentGrades(
+    @Param('id') id: string,
+    @Query('semester') semester?: string,
+    @Query('academicYear') academicYear?: string,
+  ) {
+    return this.studentsService.getGrades(
+      id,
+      semester ? parseInt(semester, 10) : undefined,
+      academicYear,
+    );
+  }
+
+  @Roles(Role.STAFF, Role.ADMIN)
+  @Get(':id/scholarship')
+  getStudentScholarship(@Param('id') id: string) {
+    return this.studentsService.getScholarship(id);
+  }
+
+  @Roles(Role.STAFF, Role.ADMIN)
+  @Get(':id/portfolio')
+  getStudentPortfolio(
+    @Param('id') id: string,
+    @Query('category') category?: PortfolioCategory,
+  ) {
+    return this.studentsService.getPortfolio(id, category);
+  }
+}

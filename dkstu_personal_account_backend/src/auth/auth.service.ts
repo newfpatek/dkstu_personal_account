@@ -6,6 +6,7 @@ import * as bcrypt from 'bcrypt';
 import { User } from '../modules/users/entities/user.entity';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
+import { Role } from './enums/role.enum';
 
 @Injectable()
 export class AuthService {
@@ -34,7 +35,7 @@ export class AuthService {
       email: dto.email,
       password: hashedPassword,
       fullName: dto.fullName,
-      // role: 'student' — роль по умолчанию из /modules/users/entities/user.entity.ts
+      role: Role.STUDENT,
     });
 
     await this.userRepository.save(user);
