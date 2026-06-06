@@ -6,6 +6,7 @@ import { AuthModule } from './auth/auth.module';
 import { DashboardModule } from './dashboard/dashboard.module';
 import { StudentsModule } from './modules/students/students.module';
 import { MessagesModule } from './modules/messages/messages.module';
+import { AdminModule } from './modules/admin/admin.module';
 
 @Module({
   imports: [
@@ -30,6 +31,7 @@ import { MessagesModule } from './modules/messages/messages.module';
     DashboardModule,
     StudentsModule,
     MessagesModule,
+    AdminModule,
   ],
   controllers: [AppController],
 })
