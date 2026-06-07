@@ -22,3 +22,8 @@ docker compose down
 
 // выход
 \q
+
+// Тест авторизации
+
+Студент: email: student_test@test.ru, password: 123456;
+Преподаватель: email: teacher@test.ru, password: teacher123;

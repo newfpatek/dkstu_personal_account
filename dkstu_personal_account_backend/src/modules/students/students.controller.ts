@@ -7,10 +7,12 @@ import {
   Query,
   Body,
   Request,
+  Res,
   UseGuards,
   UseInterceptors,
   UploadedFile,
 } from '@nestjs/common';
+import type { Response } from 'express';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { diskStorage } from 'multer';
 import * as path from 'path';
@@ -26,6 +28,19 @@ import { PortfolioCategory } from './enums/portfolio-category.enum';
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class StudentsController {
   constructor(private readonly studentsService: StudentsService) {}
+
+  // ── Student: profile & group ─────────────────────────────────────────────
+
+  @Get('me/profile')
+  getMyProfile(@Request() req) {
+    return this.studentsService.getProfile(req.user.id);
+  }
+
+  @Roles(Role.STUDENT)
+  @Get('me/group')
+  getMyGroup(@Request() req) {
+    return this.studentsService.getMyGroup(req.user.id);
+  }
 
   // ── Student: grades ──────────────────────────────────────────────────────
 
@@ -71,6 +86,19 @@ export class StudentsController {
   }
 
   // ── Student: portfolio ───────────────────────────────────────────────────
+
+  // download должен быть объявлен ДО me/portfolio чтобы NestJS не перепутал маршруты
+  @Roles(Role.STUDENT)
+  @Get('me/portfolio/download')
+  downloadMyPortfolio(
+    @Request() req,
+    @Res() res: Response,
+    @Query('category') category?: PortfolioCategory,
+    @Query('dateFrom') dateFrom?: string,
+    @Query('dateTo') dateTo?: string,
+  ) {
+    return this.studentsService.downloadPortfolio(req.user.id, res, category, dateFrom, dateTo);
+  }
 
   @Roles(Role.STUDENT)
   @Get('me/portfolio')

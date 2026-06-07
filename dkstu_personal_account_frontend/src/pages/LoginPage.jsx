@@ -23,6 +23,7 @@ export default function LoginPage() {
       // Редирект по роли
       if (user.role === 'admin') navigate('/admin');
       else if (user.role === 'teacher') navigate('/teacher');
+      else if (user.role === 'staff') navigate('/staff');
       else navigate('/student');
 
     } catch (err) {

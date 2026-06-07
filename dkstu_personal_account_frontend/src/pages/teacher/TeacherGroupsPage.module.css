@@ -1,0 +1,89 @@
+.groupTabs {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 28px;
+}
+
+.groupCard {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 12px 18px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: transparent;
+  cursor: pointer;
+  text-align: left;
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.groupCard:hover {
+  border-color: var(--accent-border);
+  background: var(--accent-bg);
+}
+
+.groupCardSelected {
+  border-color: var(--accent);
+  background: var(--accent-bg);
+}
+
+.groupName {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-h);
+}
+
+.groupMeta {
+  font-size: 12px;
+  color: var(--text);
+}
+
+.tableWrap {
+  overflow-x: auto;
+}
+
+.numCell {
+  color: var(--text);
+  opacity: 0.5;
+  font-size: 13px;
+  text-align: center;
+}
+
+.statCell {
+  text-align: center;
+  font-size: 14px;
+  color: var(--text-h);
+}
+
+.roleTag {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 2px 10px;
+  background: var(--accent-bg);
+  border: 1px solid var(--accent-border);
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--accent);
+  white-space: nowrap;
+}
+
+.paidBadge {
+  display: inline-block;
+  padding: 2px 10px;
+  background: rgba(161, 161, 170, 0.15);
+  border: 1px solid rgba(161, 161, 170, 0.3);
+  border-radius: 12px;
+  font-size: 12px;
+  color: var(--text);
+}
+
+.noDebts {
+  color: var(--text);
+  opacity: 0.4;
+}
+
+.debtValue {
+  color: #dc2626;
+}

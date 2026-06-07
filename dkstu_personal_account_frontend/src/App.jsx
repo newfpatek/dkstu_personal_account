@@ -1,11 +1,15 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import LoginPage from './pages/LoginPage';
 import ProtectedRoute from './components/ProtectedRoute';
-
-// Страницы — создай их сам, пока просто заглушки
-const StudentPage = () => <h1>Кабинет студента</h1>;
-const TeacherPage = () => <h1>Кабинет преподавателя</h1>;
-const AdminPage = () => <h1>Панель администратора</h1>;
+import StudentPage from './pages/StudentPage';
+import TeacherPage from './pages/TeacherPage';
+import AdminPage from './pages/AdminPage';
+import GradesPage from './pages/student/GradesPage';
+import ScholarshipPage from './pages/student/ScholarshipPage';
+import PortfolioPage from './pages/student/PortfolioPage';
+import MessagesPage from './pages/student/MessagesPage';
+import GroupPage from './pages/student/GroupPage';
+import TeacherGroupsPage from './pages/teacher/TeacherGroupsPage';
 
 export default function App() {
   return (
@@ -20,7 +24,15 @@ export default function App() {
               <StudentPage />
             </ProtectedRoute>
           }
-        />
+        >
+          <Route index element={<Navigate to="grades" replace />} />
+          <Route path="group" element={<GroupPage />} />
+          <Route path="grades" element={<GradesPage />} />
+          <Route path="scholarship" element={<ScholarshipPage />} />
+          <Route path="portfolio" element={<PortfolioPage />} />
+          <Route path="messages" element={<MessagesPage />} />
+        </Route>
+
         <Route
           path="/teacher"
           element={
@@ -28,7 +40,21 @@ export default function App() {
               <TeacherPage />
             </ProtectedRoute>
           }
+        >
+          <Route index element={<Navigate to="groups" replace />} />
+          <Route path="groups" element={<TeacherGroupsPage />} />
+          <Route path="messages" element={<MessagesPage />} />
+        </Route>
+
+        <Route
+          path="/staff"
+          element={
+            <ProtectedRoute allowedRoles={['staff']}>
+              <div style={{ padding: 32 }}><h1>Кабинет сотрудника</h1></div>
+            </ProtectedRoute>
+          }
         />
+
         <Route
           path="/admin"
           element={
@@ -38,7 +64,6 @@ export default function App() {
           }
         />
 
-        {/* Дефолтный редирект */}
         <Route path="*" element={<Navigate to="/login" replace />} />
       </Routes>
     </BrowserRouter>

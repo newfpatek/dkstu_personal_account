@@ -4,14 +4,20 @@ import {
   ForbiddenException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { In, Repository } from 'typeorm';
 import * as fs from 'fs';
+import * as path from 'path';
+import type { Response } from 'express';
 import { GradeRecord } from './entities/grade-record.entity';
 import { PortfolioItem } from './entities/portfolio-item.entity';
 import { Scholarship } from './entities/scholarship.entity';
 import { User } from '../users/entities/user.entity';
+import { UserGroupRole } from '../groups/entities/user-group-role.entity';
 import { PortfolioCategory } from './enums/portfolio-category.enum';
 import { GradeValue } from './enums/grade-value.enum';
+
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const archiver = require('archiver') as any;
 
 const NUMERIC_GRADES: Partial<Record<GradeValue, number>> = {
   [GradeValue.EXCELLENT]: 5,
@@ -32,6 +38,8 @@ export class StudentsService {
     private scholarshipRepo: Repository<Scholarship>,
     @InjectRepository(User)
     private userRepo: Repository<User>,
+    @InjectRepository(UserGroupRole)
+    private userGroupRoleRepo: Repository<UserGroupRole>,
   ) {}
 
   async getGrades(
@@ -125,6 +133,56 @@ export class StudentsService {
     return this.portfolioRepo.save(item);
   }
 
+  async downloadPortfolio(
+    studentId: string,
+    res: Response,
+    category?: PortfolioCategory,
+    dateFrom?: string,
+    dateTo?: string,
+  ): Promise<void> {
+    const qb = this.portfolioRepo
+      .createQueryBuilder('p')
+      .where('p.studentId = :studentId', { studentId })
+      .andWhere('p.filePath IS NOT NULL');
+
+    if (category) qb.andWhere('p.category = :category', { category });
+
+    if (dateFrom) {
+      qb.andWhere('p.createdAt >= :dateFrom', { dateFrom: new Date(dateFrom) });
+    }
+    if (dateTo) {
+      const to = new Date(dateTo);
+      to.setHours(23, 59, 59, 999);
+      qb.andWhere('p.createdAt <= :dateTo', { dateTo: to });
+    }
+
+    const items = await qb.orderBy('p.createdAt', 'ASC').getMany();
+    const existing = items.filter((i) => i.filePath && fs.existsSync(i.filePath));
+
+    if (existing.length === 0) {
+      throw new NotFoundException('Нет файлов по указанным фильтрам');
+    }
+
+    res.setHeader('Content-Type', 'application/zip');
+    res.setHeader('Content-Disposition', 'attachment; filename="portfolio.zip"');
+
+    const archive = archiver('zip', { zlib: { level: 6 } });
+    archive.on('error', (err) => { throw err; });
+    archive.pipe(res);
+
+    // Если несколько файлов с одинаковым именем — добавляем порядковый номер
+    const usedNames = new Map<string, number>();
+    for (const item of existing) {
+      const base = item.fileName || path.basename(item.filePath!);
+      const count = usedNames.get(base) ?? 0;
+      usedNames.set(base, count + 1);
+      const archiveName = count === 0 ? base : `${count + 1}_${base}`;
+      archive.file(item.filePath!, { name: archiveName });
+    }
+
+    await archive.finalize();
+  }
+
   async deletePortfolioItem(studentId: string, itemId: string) {
     const item = await this.portfolioRepo.findOne({ where: { id: itemId } });
     if (!item) throw new NotFoundException('Элемент портфолио не найден');
@@ -135,5 +193,53 @@ export class StudentsService {
     }
     await this.portfolioRepo.remove(item);
     return { message: 'Удалено' };
+  }
+
+  async getProfile(userId: string) {
+    const user = await this.userRepo
+      .createQueryBuilder('u')
+      .leftJoinAndSelect('u.groups', 'g')
+      .where('u.id = :userId', { userId })
+      .getOne();
+
+    if (!user) throw new NotFoundException('Пользователь не найден');
+
+    const { password, ...safe } = user as any;
+    return safe;
+  }
+
+  async getMyGroup(userId: string) {
+    const user = await this.userRepo
+      .createQueryBuilder('u')
+      .leftJoinAndSelect('u.groups', 'g')
+      .leftJoinAndSelect('g.members', 'm')
+      .where('u.id = :userId', { userId })
+      .getOne();
+
+    if (!user) throw new NotFoundException('Пользователь не найден');
+
+    const groupIds = (user.groups ?? []).map((g) => g.id);
+
+    const roleEntries = groupIds.length > 0
+      ? await this.userGroupRoleRepo.find({ where: { groupId: In(groupIds) } })
+      : [];
+
+    return (user.groups ?? []).map((group) => ({
+      id: group.id,
+      name: group.name,
+      year: group.year,
+      members: (group.members ?? [])
+        .map((member) => {
+          const entry = roleEntries.find(
+            (r) => r.userId === member.id && r.groupId === group.id,
+          );
+          return {
+            id: member.id,
+            fullName: member.fullName,
+            groupRole: entry?.label ?? null,
+          };
+        })
+        .sort((a, b) => a.fullName.localeCompare(b.fullName, 'ru')),
+    }));
   }
 }

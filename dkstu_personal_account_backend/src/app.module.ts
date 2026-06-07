@@ -7,6 +7,7 @@ import { DashboardModule } from './dashboard/dashboard.module';
 import { StudentsModule } from './modules/students/students.module';
 import { MessagesModule } from './modules/messages/messages.module';
 import { AdminModule } from './modules/admin/admin.module';
+import { TeacherModule } from './modules/teacher/teacher.module';
 
 @Module({
   imports: [
@@ -32,6 +33,7 @@ import { AdminModule } from './modules/admin/admin.module';
     StudentsModule,
     MessagesModule,
     AdminModule,
+    TeacherModule,
   ],
   controllers: [AppController],
 })
