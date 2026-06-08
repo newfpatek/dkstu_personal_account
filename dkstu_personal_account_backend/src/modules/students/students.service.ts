@@ -13,6 +13,7 @@ import { PortfolioItem } from './entities/portfolio-item.entity';
 import { Scholarship } from './entities/scholarship.entity';
 import { User } from '../users/entities/user.entity';
 import { UserGroupRole } from '../groups/entities/user-group-role.entity';
+import { GroupSemesterDiscipline } from '../groups/entities/group-semester-discipline.entity';
 import { PortfolioCategory } from './enums/portfolio-category.enum';
 import { GradeValue } from './enums/grade-value.enum';
 
@@ -40,6 +41,8 @@ export class StudentsService {
     private userRepo: Repository<User>,
     @InjectRepository(UserGroupRole)
     private userGroupRoleRepo: Repository<UserGroupRole>,
+    @InjectRepository(GroupSemesterDiscipline)
+    private groupSemDisciplineRepo: Repository<GroupSemesterDiscipline>,
   ) {}
 
   async getGrades(
@@ -57,6 +60,55 @@ export class StudentsService {
       qb.andWhere('gr.academicYear = :academicYear', { academicYear });
 
     return qb.orderBy('discipline.name', 'ASC').getMany();
+  }
+
+  async getCurrentSemesterPlan(studentId: string, semester?: number, academicYear?: string) {
+    const user = await this.userRepo
+      .createQueryBuilder('u')
+      .leftJoinAndSelect('u.groups', 'g')
+      .where('u.id = :studentId', { studentId })
+      .getOne();
+
+    const groupIds = (user?.groups ?? []).map((g) => g.id);
+    if (!groupIds.length) return { semester: null, academicYear: null, entries: [] };
+
+    const qb = this.groupSemDisciplineRepo
+      .createQueryBuilder('gsd')
+      .leftJoinAndSelect('gsd.discipline', 'd')
+      .where('gsd.groupId IN (:...groupIds)', { groupIds });
+
+    if (semester !== undefined) qb.andWhere('gsd.semester = :semester', { semester });
+    if (academicYear) qb.andWhere('gsd.academicYear = :academicYear', { academicYear });
+
+    qb.orderBy('gsd.academicYear', 'DESC').addOrderBy('gsd.semester', 'DESC');
+
+    const all = await qb.getMany();
+    if (!all.length) return { semester: null, academicYear: null, entries: [] };
+
+    // Если семестр/год не указан — берём самую последнюю запись
+    const targetSemester = semester ?? all[0].semester;
+    const targetYear = academicYear ?? all[0].academicYear;
+    const planned = all.filter((p) => p.semester === targetSemester && p.academicYear === targetYear);
+
+    // Подтягиваем реальные оценки для этого студента/семестра/года
+    const grades = await this.gradeRepo.find({
+      where: { studentId, semester: targetSemester, academicYear: targetYear },
+      relations: { discipline: true },
+    });
+    const gradeMap = new Map(grades.map((g) => [g.disciplineId, g]));
+
+    const entries = planned.map((p) => {
+      const grade = gradeMap.get(p.disciplineId);
+      return {
+        disciplineId: p.disciplineId,
+        discipline: p.discipline,
+        gradeRecordId: grade?.id ?? null,
+        gradeValue: grade?.gradeValue ?? null,
+        isDebt: grade?.isDebt ?? false,
+      };
+    }).sort((a, b) => a.discipline.name.localeCompare(b.discipline.name, 'ru'));
+
+    return { semester: targetSemester, academicYear: targetYear, entries };
   }
 
   async getGradesHistory(studentId: string) {
@@ -77,9 +129,34 @@ export class StudentsService {
     return grouped;
   }
 
+  // Одна запись на дисциплину — берётся из последнего семестра (academicYear DESC, semester DESC)
+  async getLatestGradesPerDiscipline(studentId: string): Promise<GradeRecord[]> {
+    const all = await this.gradeRepo.find({
+      where: { studentId },
+      relations: { discipline: true },
+    });
+
+    const latest = new Map<string, GradeRecord>();
+    for (const r of all) {
+      const prev = latest.get(r.disciplineId);
+      if (!prev || this.isLaterSemester(r, prev)) {
+        latest.set(r.disciplineId, r);
+      }
+    }
+
+    return Array.from(latest.values()).sort((a, b) =>
+      (a.discipline?.name ?? '').localeCompare(b.discipline?.name ?? '', 'ru'),
+    );
+  }
+
+  private isLaterSemester(a: GradeRecord, b: GradeRecord): boolean {
+    if (a.academicYear !== b.academicYear) return a.academicYear > b.academicYear;
+    return a.semester > b.semester;
+  }
+
   async calculateGpa(studentId: string): Promise<number | null> {
-    const records = await this.gradeRepo.find({ where: { studentId } });
-    const numericValues = records
+    const latest = await this.getLatestGradesPerDiscipline(studentId);
+    const numericValues = latest
       .map((r) => NUMERIC_GRADES[r.gradeValue])
       .filter((v): v is number => v !== undefined);
 

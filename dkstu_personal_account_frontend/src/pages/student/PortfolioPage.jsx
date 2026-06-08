@@ -261,6 +261,7 @@ export default function PortfolioPage() {
           <div className={styles.formRow}>
             <label className={styles.formLabel}>Файл</label>
             <input className={styles.fileInput} type="file" ref={fileRef} />
+            <span style={{ fontSize: 12, color: 'var(--text)', opacity: 0.55 }}>Максимальный размер: 25 МБ</span>
           </div>
 
           {uploadError && <p className={s.errorMsg}>{uploadError}</p>}

@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import {
   searchStudents,
   getStudentProfile,
-  getStudentGrades,
+  getStudentAllGrades,
   getStudentScholarship,
   getStudentPortfolio,
   fetchStudentPortfolioFile,
@@ -129,8 +129,7 @@ const PORTFOLIO_FILTER_CHIPS = [
 function StudentDetail({ studentId }) {
   const [tab, setTab] = useState('grades');
   const [profile, setProfile] = useState(null);
-  const [gradesFlat, setGradesFlat] = useState([]);
-  const [grades, setGrades] = useState({});
+  const [gradesFlat, setGradesFlat] = useState([]); // latest per discipline
   const [scholarship, setScholarship] = useState(null);
   const [portfolio, setPortfolio] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -144,7 +143,6 @@ function StudentDetail({ studentId }) {
     setError('');
     setProfile(null);
     setGradesFlat([]);
-    setGrades({});
     setScholarship(null);
     setPortfolio([]);
     setPortCategory('');
@@ -152,25 +150,13 @@ function StudentDetail({ studentId }) {
 
     Promise.all([
       getStudentProfile(studentId),
-      getStudentGrades(studentId),
+      getStudentAllGrades(studentId),
       getStudentScholarship(studentId),
       getStudentPortfolio(studentId),
     ])
       .then(([profileRes, gradesRes, schRes, portRes]) => {
         setProfile(profileRes.data);
-
-        const flat = gradesRes.data;
-        setGradesFlat(flat);
-
-        // Group grades by academicYear → semester
-        const grouped = {};
-        for (const record of flat) {
-          if (!grouped[record.academicYear]) grouped[record.academicYear] = {};
-          if (!grouped[record.academicYear][record.semester])
-            grouped[record.academicYear][record.semester] = [];
-          grouped[record.academicYear][record.semester].push(record);
-        }
-        setGrades(grouped);
+        setGradesFlat(gradesRes.data);
         setScholarship(schRes.data);
         setPortfolio(portRes.data);
       })
@@ -199,7 +185,6 @@ function StudentDetail({ studentId }) {
     ? profile.fullName.split(' ').slice(0, 2).map((p) => p[0]).join('')
     : '?';
 
-  const years = Object.keys(grades).sort().reverse();
   const gpa = computeGpa(gradesFlat);
 
   return (
@@ -253,64 +238,53 @@ function StudentDetail({ studentId }) {
       {/* Grades tab */}
       {tab === 'grades' && (
         <>
-          {gpa !== null && (
-            <div className={s.summaryRow} style={{ marginBottom: 20 }}>
-              <div className={s.summaryCard}>
-                <span className={s.summaryLabel}>Средний балл</span>
-                <span className={s.summaryValue}>{gpa}</span>
-              </div>
-              <div className={s.summaryCard}>
-                <span className={s.summaryLabel}>Задолженности</span>
-                <span
-                  className={s.summaryValue}
-                  style={{ color: gradesFlat.filter((g) => g.isDebt).length > 0 ? '#dc2626' : '#16a34a' }}
-                >
-                  {gradesFlat.filter((g) => g.isDebt).length}
-                </span>
-              </div>
+          <div className={s.summaryRow} style={{ marginBottom: 20 }}>
+            <div className={s.summaryCard}>
+              <span className={s.summaryLabel}>Средний балл</span>
+              <span className={s.summaryValue}>{gpa !== null ? gpa : '—'}</span>
             </div>
-          )}
-          {years.length === 0 ? (
+            <div className={s.summaryCard}>
+              <span className={s.summaryLabel}>Задолженности</span>
+              <span
+                className={s.summaryValue}
+                style={{ color: gradesFlat.filter((g) => g.isDebt).length > 0 ? '#dc2626' : '#16a34a' }}
+              >
+                {gradesFlat.filter((g) => g.isDebt).length}
+              </span>
+            </div>
+          </div>
+          {gradesFlat.length === 0 ? (
             <p className={s.empty}>Оценок пока нет</p>
           ) : (
-            years.map((year) => (
-              <div key={year}>
-                <h3 className={s.historyYear}>{year}</h3>
-                {Object.keys(grades[year])
-                  .sort()
-                  .reverse()
-                  .map((sem) => (
-                    <div key={sem}>
-                      <h4 className={s.semesterTitle}>{sem} семестр</h4>
-                      <table className={s.table}>
-                        <thead>
-                          <tr>
-                            <th>Дисциплина</th>
-                            <th>Тип</th>
-                            <th>Оценка</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {grades[year][sem].map((g) => (
-                            <tr key={g.id}>
-                              <td>{g.discipline?.name || '—'}</td>
-                              <td style={{ color: 'var(--text)', fontSize: 13 }}>
-                                {g.discipline?.disciplineType === 'exam' ? 'Экзамен' : 'Зачёт'}
-                              </td>
-                              <td>
-                                <GradeCell value={g.gradeValue} />
-                                {g.isDebt && (
-                                  <span className={`${s.badge} ${s.debtBadge}`}>Долг</span>
-                                )}
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  ))}
-              </div>
-            ))
+            <table className={s.table}>
+              <thead>
+                <tr>
+                  <th>Дисциплина</th>
+                  <th>Тип</th>
+                  <th>Семестр</th>
+                  <th>Оценка</th>
+                </tr>
+              </thead>
+              <tbody>
+                {gradesFlat.map((g) => (
+                  <tr key={g.id}>
+                    <td>{g.discipline?.name || '—'}</td>
+                    <td style={{ color: 'var(--text)', fontSize: 13 }}>
+                      {g.discipline?.disciplineType === 'exam' ? 'Экзамен' : 'Зачёт'}
+                    </td>
+                    <td style={{ color: 'var(--text)', fontSize: 13 }}>
+                      {g.semester}
+                    </td>
+                    <td>
+                      <GradeCell value={g.gradeValue} />
+                      {g.isDebt && (
+                        <span className={`${s.badge} ${s.debtBadge}`}>Долг</span>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           )}
         </>
       )}

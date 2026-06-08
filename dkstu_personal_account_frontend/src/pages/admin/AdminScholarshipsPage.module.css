@@ -1,0 +1,172 @@
+/* Base amounts panel */
+.basePanel {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 20px 24px;
+  margin-bottom: 20px;
+}
+
+.basePanelTitle {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-h);
+  margin-bottom: 16px;
+}
+
+.baseAmountsGrid {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.baseAmountItem {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.baseAmountLabel {
+  min-width: 240px;
+  font-size: 14px;
+  color: var(--text-h);
+}
+
+.baseAmountValue {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.baseAmountValue > span {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-h);
+  min-width: 100px;
+}
+
+.baseAmountEdit {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.baseAmountInput {
+  width: 120px;
+  padding: 5px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 14px;
+  color: var(--text-h);
+  background: var(--bg);
+  outline: none;
+}
+
+.baseAmountInput:focus {
+  border-color: var(--accent);
+}
+
+.baseAmountCalc {
+  font-size: 14px;
+  font-weight: 500;
+  color: #16a34a;
+  min-width: 100px;
+}
+
+.baseAmountSection {
+  border-top: 1px solid var(--border);
+  padding-top: 14px;
+  margin-top: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.baseAmountSectionTitle {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+  opacity: 0.7;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  margin-bottom: 2px;
+}
+
+/* Scholarship cards */
+.scholarshipCard {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 14px 16px;
+  margin-bottom: 10px;
+}
+
+.schCardHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 6px;
+}
+
+.schCardTitle {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-h);
+  margin-bottom: 10px;
+}
+
+.schType {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-h);
+}
+
+.schStatus {
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.schAmount {
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--accent);
+  margin: 4px 0;
+}
+
+.schMeta {
+  font-size: 13px;
+  color: var(--text);
+  opacity: 0.75;
+  margin-top: 2px;
+}
+
+.schActions {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+/* Warning / info boxes */
+.warningBox {
+  padding: 10px 14px;
+  border-radius: 6px;
+  background: rgba(234, 179, 8, 0.1);
+  border: 1px solid rgba(234, 179, 8, 0.35);
+  color: #92400e;
+  font-size: 14px;
+  margin-bottom: 16px;
+}
+
+/* Add form section */
+.addFormWrap {
+  border: 1px dashed var(--border);
+  border-radius: 8px;
+  padding: 16px;
+  margin-top: 12px;
+}
+
+.addFormTitle {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-h);
+  margin-bottom: 14px;
+}

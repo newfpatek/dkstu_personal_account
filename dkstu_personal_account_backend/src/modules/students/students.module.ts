@@ -7,9 +7,10 @@ import { PortfolioItem } from './entities/portfolio-item.entity';
 import { Scholarship } from './entities/scholarship.entity';
 import { User } from '../users/entities/user.entity';
 import { UserGroupRole } from '../groups/entities/user-group-role.entity';
+import { GroupSemesterDiscipline } from '../groups/entities/group-semester-discipline.entity';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([GradeRecord, PortfolioItem, Scholarship, User, UserGroupRole])],
+  imports: [TypeOrmModule.forFeature([GradeRecord, PortfolioItem, Scholarship, User, UserGroupRole, GroupSemesterDiscipline])],
   providers: [StudentsService],
   controllers: [StudentsController],
   exports: [StudentsService],

@@ -45,6 +45,26 @@ export class StudentsController {
   // ── Student: grades ──────────────────────────────────────────────────────
 
   @Roles(Role.STUDENT)
+  @Get('me/grades/current')
+  getMyCurrentSemesterPlan(
+    @Request() req,
+    @Query('semester') semester?: string,
+    @Query('academicYear') academicYear?: string,
+  ) {
+    return this.studentsService.getCurrentSemesterPlan(
+      req.user.id,
+      semester ? parseInt(semester, 10) : undefined,
+      academicYear,
+    );
+  }
+
+  @Roles(Role.STUDENT)
+  @Get('me/grades/all')
+  getAllGrades(@Request() req) {
+    return this.studentsService.getLatestGradesPerDiscipline(req.user.id);
+  }
+
+  @Roles(Role.STUDENT)
   @Get('me/grades')
   getMyGrades(
     @Request() req,
@@ -140,7 +160,7 @@ export class StudentsController {
           cb(null, `${unique}${path.extname(file.originalname)}`);
         },
       }),
-      limits: { fileSize: 10 * 1024 * 1024 }, // 10 MB
+      limits: { fileSize: 25 * 1024 * 1024 }, // 25 MB
     }),
   )
   addPortfolioItem(
@@ -172,6 +192,12 @@ export class StudentsController {
   @Get(':id/profile')
   getStudentProfile(@Param('id') id: string) {
     return this.studentsService.getStudentProfileById(id);
+  }
+
+  @Roles(Role.STAFF, Role.ADMIN)
+  @Get(':id/grades/all')
+  getStudentAllGrades(@Param('id') id: string) {
+    return this.studentsService.getLatestGradesPerDiscipline(id);
   }
 
   @Roles(Role.STAFF, Role.ADMIN)

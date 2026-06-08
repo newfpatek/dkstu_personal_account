@@ -17,6 +17,9 @@ export const getStudentGrades = (id, semester, academicYear) => {
   return apiClient.get(`/students/${id}/grades`, { params });
 };
 
+export const getStudentAllGrades = (id) =>
+  apiClient.get(`/students/${id}/grades/all`);
+
 export const getStudentScholarship = (id) =>
   apiClient.get(`/students/${id}/scholarship`);
 

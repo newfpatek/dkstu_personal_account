@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { getGradesHistory, getGpa, getDebts } from '../../api/students';
+import { getAllGrades, getGradesHistory, getGpa, getDebts, getMyCurrentSemesterPlan } from '../../api/students';
 import s from './shared.module.css';
 
 const GRADE_LABELS = {
@@ -35,28 +35,29 @@ function GradeCell({ value }) {
 export default function GradesPage() {
   const [tab, setTab] = useState('current');
   const [history, setHistory] = useState({});
+  const [plan, setPlan] = useState(null); // { semester, academicYear, entries[] }
+  const [allGrades, setAllGrades] = useState([]);
   const [gpa, setGpa] = useState(null);
   const [debts, setDebts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
   useEffect(() => {
-    Promise.all([getGradesHistory(), getGpa(), getDebts()])
-      .then(([histRes, gpaRes, debtsRes]) => {
+    Promise.all([getGradesHistory(), getGpa(), getDebts(), getMyCurrentSemesterPlan(), getAllGrades()])
+      .then(([histRes, gpaRes, debtsRes, planRes, allRes]) => {
         setHistory(histRes.data);
         setGpa(gpaRes.data.gpa);
         setDebts(debtsRes.data);
+        setPlan(planRes.data);
+        setAllGrades(allRes.data);
       })
       .catch(() => setError('Не удалось загрузить данные'))
       .finally(() => setLoading(false));
   }, []);
 
-  // Найти последний (текущий) год и семестр
+  const hasPlan = plan && plan.entries && plan.entries.length > 0;
+
   const years = Object.keys(history).sort().reverse();
-  const currentYear = years[0];
-  const currentSemesters = currentYear ? Object.keys(history[currentYear]).sort().reverse() : [];
-  const currentSemester = currentSemesters[0];
-  const currentGrades = currentYear && currentSemester ? history[currentYear][currentSemester] : [];
 
   if (loading) return <p className={s.empty}>Загрузка...</p>;
   if (error) return <p className={s.errorMsg}>{error}</p>;
@@ -89,6 +90,12 @@ export default function GradesPage() {
           Текущий семестр
         </button>
         <button
+          className={`${s.tab} ${tab === 'all' ? s.activeTab : ''}`}
+          onClick={() => setTab('all')}
+        >
+          Все оценки
+        </button>
+        <button
           className={`${s.tab} ${tab === 'history' ? s.activeTab : ''}`}
           onClick={() => setTab('history')}
         >
@@ -98,12 +105,10 @@ export default function GradesPage() {
 
       {tab === 'current' && (
         <>
-          {currentGrades.length === 0 ? (
-            <p className={s.empty}>Нет оценок за текущий период</p>
-          ) : (
+          {hasPlan ? (
             <>
               <p style={{ fontSize: 13, color: 'var(--text)', marginBottom: 12 }}>
-                {currentYear} — {currentSemester} семестр
+                {plan.academicYear} — {plan.semester} семестр
               </p>
               <table className={s.table}>
                 <thead>
@@ -114,16 +119,22 @@ export default function GradesPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {currentGrades.map((g) => (
-                    <tr key={g.id}>
-                      <td>{g.discipline?.name || '—'}</td>
+                  {plan.entries.map((entry) => (
+                    <tr key={entry.disciplineId}>
+                      <td>{entry.discipline?.name || '—'}</td>
                       <td style={{ color: 'var(--text)', fontSize: 13 }}>
-                        {g.discipline?.disciplineType === 'exam' ? 'Экзамен' : 'Зачёт'}
+                        {entry.discipline?.disciplineType === 'exam' ? 'Экзамен' : 'Зачёт'}
                       </td>
                       <td>
-                        <GradeCell value={g.gradeValue} />
-                        {g.isDebt && (
-                          <span className={`${s.badge} ${s.debtBadge}`}>Долг</span>
+                        {entry.gradeValue ? (
+                          <>
+                            <GradeCell value={entry.gradeValue} />
+                            {entry.isDebt && (
+                              <span className={`${s.badge} ${s.debtBadge}`}>Долг</span>
+                            )}
+                          </>
+                        ) : (
+                          <span style={{ color: 'var(--text)', opacity: 0.4, fontSize: 13 }}>Нет оценки</span>
                         )}
                       </td>
                     </tr>
@@ -131,6 +142,46 @@ export default function GradesPage() {
                 </tbody>
               </table>
             </>
+          ) : (
+            <p className={s.empty}>Дисциплины на текущий семестр не назначены</p>
+          )}
+        </>
+      )}
+
+      {tab === 'all' && (
+        <>
+          {allGrades.length === 0 ? (
+            <p className={s.empty}>Нет оценок</p>
+          ) : (
+            <table className={s.table}>
+              <thead>
+                <tr>
+                  <th>Дисциплина</th>
+                  <th>Тип</th>
+                  <th>Семестр</th>
+                  <th>Оценка</th>
+                </tr>
+              </thead>
+              <tbody>
+                {allGrades.map((g) => (
+                  <tr key={g.id}>
+                    <td>{g.discipline?.name || '—'}</td>
+                    <td style={{ color: 'var(--text)', fontSize: 13 }}>
+                      {g.discipline?.disciplineType === 'exam' ? 'Экзамен' : 'Зачёт'}
+                    </td>
+                    <td style={{ color: 'var(--text)', fontSize: 13 }}>
+                      {g.semester}
+                    </td>
+                    <td>
+                      <GradeCell value={g.gradeValue} />
+                      {g.isDebt && (
+                        <span className={`${s.badge} ${s.debtBadge}`}>Долг</span>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           )}
         </>
       )}

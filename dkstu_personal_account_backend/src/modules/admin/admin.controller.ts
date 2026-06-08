@@ -26,6 +26,7 @@ import { SetBaseAmountDto } from './dto/set-base-amount.dto';
 import { AssignScholarshipDto } from './dto/assign-scholarship.dto';
 import { UpdateScholarshipDto } from './dto/update-scholarship.dto';
 import { SetGroupRoleDto } from './dto/set-group-role.dto';
+import { AssignGroupDisciplinesDto } from './dto/assign-group-disciplines.dto';
 import { CreateTeacherAssignmentDto } from './dto/create-teacher-assignment.dto';
 
 @Controller('admin')
@@ -69,6 +70,13 @@ export class AdminController {
   }
 
   // ─── Groups ──────────────────────────────────────────────────────────────
+
+  @Post('groups/import')
+  @UseInterceptors(FileInterceptor('file', { storage: memoryStorage() }))
+  importGroup(@UploadedFile() file: Express.Multer.File) {
+    if (!file) return { error: 'Файл не загружен' };
+    return this.adminService.importGroup(file.buffer, file.mimetype, file.originalname);
+  }
 
   @Post('groups')
   createGroup(@Body() dto: CreateGroupDto) {
@@ -125,6 +133,38 @@ export class AdminController {
     return this.adminService.removeGroupRole(groupId, userId);
   }
 
+  // ─── Group semester disciplines ──────────────────────────────────────────
+
+  @Post('group-disciplines/import')
+  @UseInterceptors(FileInterceptor('file', { storage: memoryStorage() }))
+  importGroupDisciplines(@UploadedFile() file: Express.Multer.File) {
+    if (!file) return { error: 'Файл не загружен' };
+    return this.adminService.importGroupDisciplines(file.buffer, file.mimetype, file.originalname);
+  }
+
+  @Post('group-disciplines')
+  assignGroupDisciplines(@Body() dto: AssignGroupDisciplinesDto) {
+    return this.adminService.assignGroupDisciplines(dto);
+  }
+
+  @Get('group-disciplines')
+  getGroupSemesterDisciplines(
+    @Query('groupId') groupId: string,
+    @Query('semester') semester?: string,
+    @Query('academicYear') academicYear?: string,
+  ) {
+    return this.adminService.getGroupSemesterDisciplines(
+      groupId,
+      semester ? parseInt(semester, 10) : undefined,
+      academicYear,
+    );
+  }
+
+  @Delete('group-disciplines/:id')
+  removeGroupSemesterDiscipline(@Param('id', ParseUUIDPipe) id: string) {
+    return this.adminService.removeGroupSemesterDiscipline(id);
+  }
+
   // ─── Teacher assignments ──────────────────────────────────────────────────
 
   @Post('teacher-assignments')
@@ -150,7 +190,14 @@ export class AdminController {
     return this.adminService.getDisciplines();
   }
 
-  // ─── Scholarship base amounts ─────────────────────────────────────────────
+  // ─── Scholarship base amounts & import ───────────────────────────────────
+
+  @Post('scholarships/import')
+  @UseInterceptors(FileInterceptor('file', { storage: memoryStorage() }))
+  importScholarships(@UploadedFile() file: Express.Multer.File) {
+    if (!file) return { error: 'Файл не загружен' };
+    return this.adminService.importScholarships(file.buffer, file.mimetype, file.originalname);
+  }
 
   @Get('scholarships/base')
   getBaseAmounts() {

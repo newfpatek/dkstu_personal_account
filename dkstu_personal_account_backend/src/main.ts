@@ -1,6 +1,7 @@
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { ValidationPipe } from '@nestjs/common';
+import { MulterExceptionFilter } from './common/filters/multer-exception.filter';
 
 // Задаём UTC до создания pg-соединений. Драйвер pg читает timezone
 // при установке соединения — поэтому ОБЯЗАТЕЛЬНО до NestFactory.create().
@@ -18,6 +19,7 @@ async function bootstrap() {
   });
 
   app.useGlobalPipes(new ValidationPipe());
+  app.useGlobalFilters(new MulterExceptionFilter());
   const port = process.env.PORT ?? 3000;
   await app.listen(port);
   console.log(`Server running on http://localhost:${port}/api`);
