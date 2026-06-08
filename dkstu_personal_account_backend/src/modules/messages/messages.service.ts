@@ -82,45 +82,77 @@ export class MessagesService {
     });
   }
 
-  async getUsers(currentUserId: string): Promise<Pick<User, 'id' | 'fullName' | 'role'>[]> {
-    return this.userRepo.find({
-      where: { id: Not(currentUserId) },
-      select: { id: true, fullName: true, role: true },
-      order: { fullName: 'ASC' },
-    });
+  async getUsers(
+    currentUserId: string,
+    query?: string,
+  ): Promise<{ id: string; fullName: string; role: string; email: string }[]> {
+    const qb = this.userRepo
+      .createQueryBuilder('u')
+      .select(['u.id', 'u.fullName', 'u.role', 'u.email'])
+      .where('u.id != :currentUserId', { currentUserId });
+
+    if (query?.trim()) {
+      qb.andWhere(
+        '(u.name ILIKE :q OR u.email ILIKE :q)',
+        { q: `%${query.trim()}%` },
+      );
+    }
+
+    return qb.orderBy('u.fullName', 'ASC').limit(10).getMany();
   }
 
-  async getGroupsForUser(userId: string, role: Role): Promise<{ id: string; name: string }[]> {
+  async getGroupsForUser(
+    userId: string,
+    role: Role,
+    query?: string,
+  ): Promise<{ id: string; name: string; year: number }[]> {
+    let groups: { id: string; name: string; year: number }[];
+
     if (role === Role.STUDENT) {
       const user = await this.userRepo
         .createQueryBuilder('u')
         .leftJoinAndSelect('u.groups', 'g')
         .where('u.id = :userId', { userId })
         .getOne();
-      return (user?.groups ?? [])
-        .map((g) => ({ id: g.id, name: g.name }))
-        .sort((a, b) => a.name.localeCompare(b.name, 'ru'));
+      groups = (user?.groups ?? []).map((g) => ({ id: g.id, name: g.name, year: g.year }));
+    } else {
+      const all = await this.groupRepo.find({ order: { name: 'ASC' } });
+      groups = all.map((g) => ({ id: g.id, name: g.name, year: g.year }));
     }
 
-    if (role === Role.TEACHER) {
-      const assignments = await this.assignmentRepo.find({
-        where: { teacherId: userId },
-        relations: { group: true },
-      });
-      const seen = new Set<string>();
-      const result: { id: string; name: string }[] = [];
-      for (const a of assignments) {
-        if (!seen.has(a.groupId)) {
-          seen.add(a.groupId);
-          result.push({ id: a.group.id, name: a.group.name });
-        }
-      }
-      return result.sort((a, b) => a.name.localeCompare(b.name, 'ru'));
+    if (query?.trim()) {
+      const q = query.trim().toLowerCase();
+      groups = groups.filter((g) => g.name.toLowerCase().includes(q));
     }
 
-    // STAFF and ADMIN see all groups
-    const groups = await this.groupRepo.find({ order: { name: 'ASC' } });
-    return groups.map((g) => ({ id: g.id, name: g.name }));
+    return groups.sort((a, b) => a.name.localeCompare(b.name, 'ru')).slice(0, 10);
+  }
+
+  async searchCombined(currentUserId: string, role: Role, query: string) {
+    if (!query?.trim() || query.trim().length < 2) return [];
+
+    const [users, groups] = await Promise.all([
+      this.getUsers(currentUserId, query),
+      role !== Role.STUDENT
+        ? this.getGroupsForUser(currentUserId, role, query)
+        : Promise.resolve([]),
+    ]);
+
+    return [
+      ...users.map((u) => ({
+        type: 'user' as const,
+        id: u.id,
+        fullName: u.fullName,
+        email: u.email,
+        role: u.role,
+      })),
+      ...groups.map((g) => ({
+        type: 'group' as const,
+        id: g.id,
+        name: g.name,
+        year: g.year,
+      })),
+    ];
   }
 
   async setMessageRelevance(userId: string, messageId: string, isRelevant: boolean) {

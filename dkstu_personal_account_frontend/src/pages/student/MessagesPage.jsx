@@ -1,5 +1,9 @@
-import { useState, useEffect } from 'react';
-import { getInbox, getSent, sendMessage, getMessageUsers, getMessageGroups, setMessageRelevance } from '../../api/messages';
+import { useState, useEffect, useRef } from 'react';
+import {
+  getInbox, getSent, sendMessage,
+  getMessageUsers, searchRecipients, setMessageRelevance,
+} from '../../api/messages';
+import { formatDateTime } from '../../utils/date';
 import s from './shared.module.css';
 import styles from './MessagesPage.module.css';
 
@@ -30,12 +34,115 @@ function applyLocalOverrides(messages) {
   }));
 }
 
-function formatDate(dateStr) {
-  const d = new Date(dateStr);
+const formatDate = formatDateTime;
+
+// isStudent=true  → searches only users (getMessageUsers)
+// isStudent=false → searches users + groups (searchRecipients)
+// onSelect(id, kind) where kind = 'user' | 'group'
+function RecipientInput({ isStudent, onSelect, onClear }) {
+  const [inputVal, setInputVal] = useState('');
+  const [isSelected, setIsSelected] = useState(false);
+  const [suggestions, setSuggestions] = useState([]);
+  const [showDrop, setShowDrop] = useState(false);
+  const [searching, setSearching] = useState(false);
+  const debounceRef = useRef(null);
+  const wrapRef = useRef(null);
+
+  useEffect(() => {
+    const handleOutsideClick = (e) => {
+      if (wrapRef.current && !wrapRef.current.contains(e.target)) setShowDrop(false);
+    };
+    document.addEventListener('mousedown', handleOutsideClick);
+    return () => document.removeEventListener('mousedown', handleOutsideClick);
+  }, []);
+
+  const handleInput = (e) => {
+    const val = e.target.value;
+    setInputVal(val);
+    if (isSelected) { setIsSelected(false); onClear(); }
+
+    clearTimeout(debounceRef.current);
+    if (val.trim().length < 2) { setSuggestions([]); setShowDrop(false); return; }
+
+    debounceRef.current = setTimeout(async () => {
+      setSearching(true);
+      try {
+        const res = isStudent
+          ? await getMessageUsers(val.trim())
+          : await searchRecipients(val.trim());
+        setSuggestions(res.data || []);
+        setShowDrop(true);
+      } catch { setSuggestions([]); }
+      finally { setSearching(false); }
+    }, 300);
+  };
+
+  const handleSelectItem = (item) => {
+    const isGroup = item.type === 'group';
+    const label = isGroup ? item.name : item.fullName;
+    const kind = isGroup ? 'group' : 'user';
+    setInputVal(label);
+    setIsSelected(true);
+    setSuggestions([]);
+    setShowDrop(false);
+    onSelect(item.id, kind);
+  };
+
+  const handleClear = () => {
+    setInputVal('');
+    setIsSelected(false);
+    setSuggestions([]);
+    setShowDrop(false);
+    onClear();
+  };
+
   return (
-    d.toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' }) +
-    ' ' +
-    d.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })
+    <div className={styles.recipientWrap} ref={wrapRef}>
+      <input
+        type="text"
+        className={`${styles.searchInput} ${isSelected ? styles.searchInputSelected : ''}`}
+        placeholder="Введите имя, email или название группы..."
+        value={inputVal}
+        onChange={handleInput}
+        autoComplete="off"
+      />
+      {inputVal && (
+        <button type="button" className={styles.clearRecipientBtn} onMouseDown={handleClear}>
+          ×
+        </button>
+      )}
+      {showDrop && (
+        <div className={styles.suggestDrop}>
+          {searching && <div className={styles.searchHint}>Поиск...</div>}
+          {!searching && suggestions.length === 0 && (
+            <div className={styles.searchHint}>Ничего не найдено</div>
+          )}
+          {!searching && suggestions.map((item) => {
+            const isGroup = item.type === 'group';
+            return (
+              <div
+                key={item.id}
+                className={styles.suggestItem}
+                onMouseDown={() => handleSelectItem(item)}
+              >
+                <div className={styles.suggestName}>
+                  {isGroup ? item.name : item.fullName}
+                  <span className={styles.resultTypeBadge}>
+                    {isGroup ? 'Группа' : (ROLE_LABELS[item.role] || item.role)}
+                  </span>
+                </div>
+                {!isGroup && item.email && (
+                  <div className={styles.suggestSub}>{item.email}</div>
+                )}
+                {isGroup && item.year && (
+                  <div className={styles.suggestSub}>Год набора: {item.year}</div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -78,17 +185,20 @@ function MsgItem({ msg, tab, onToggleRelevance }) {
 }
 
 export default function MessagesPage() {
+  const currentUserRole = JSON.parse(localStorage.getItem('user') || '{}').role || 'student';
+  const isStudent = currentUserRole === 'student';
+
   const [tab, setTab] = useState('inbox');
   const [inbox, setInbox] = useState([]);
   const [sent, setSent] = useState([]);
-  const [users, setUsers] = useState([]);
-  const [groups, setGroups] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [showCompose, setShowCompose] = useState(false);
   const [showIrrelevant, setShowIrrelevant] = useState(false);
-  const [recipientType, setRecipientType] = useState('user');
-  const [form, setForm] = useState({ recipientId: '', text: '' });
+
+  const [recipientId, setRecipientId] = useState(null);
+  const [recipientKind, setRecipientKind] = useState('user'); // 'user' | 'group'
+  const [msgText, setMsgText] = useState('');
   const [sending, setSending] = useState(false);
   const [sendError, setSendError] = useState('');
 
@@ -107,37 +217,38 @@ export default function MessagesPage() {
       .finally(() => setLoading(false));
   };
 
+  useEffect(() => { loadAll(); }, []);
+
   useEffect(() => {
-    loadAll();
-    getMessageUsers()
-      .then((r) => setUsers(r.data))
-      .catch(() => {});
-    getMessageGroups()
-      .then((r) => setGroups(r.data))
-      .catch(() => {});
-  }, []);
+    if (!showCompose) {
+      setRecipientId(null);
+      setRecipientKind('user');
+      setMsgText('');
+      setSendError('');
+    }
+  }, [showCompose]);
 
   const handleToggleRelevance = async (msgId, currentIsRelevant) => {
     const newVal = !currentIsRelevant;
     saveLocalRelevance(msgId, newVal);
     setInbox((prev) => prev.map((m) => (m.id === msgId ? { ...m, isRelevant: newVal } : m)));
     if (!newVal) setShowIrrelevant(true);
-    try { await setMessageRelevance(msgId, newVal); } catch { /* no revert — localStorage already saved */ }
+    try { await setMessageRelevance(msgId, newVal); } catch { /* localStorage already saved */ }
   };
 
   const handleSend = async (e) => {
     e.preventDefault();
-    if (!form.recipientId) { setSendError('Выберите получателя'); return; }
-    if (!form.text.trim()) { setSendError('Введите текст сообщения'); return; }
+    if (!recipientId) { setSendError('Выберите получателя из списка'); return; }
+    if (!msgText.trim()) { setSendError('Введите текст сообщения'); return; }
+
+    const payload = recipientKind === 'group'
+      ? { groupId: recipientId, text: msgText.trim() }
+      : { studentId: recipientId, text: msgText.trim() };
 
     setSending(true);
     setSendError('');
     try {
-      const payload = recipientType === 'group'
-        ? { groupId: form.recipientId, text: form.text.trim() }
-        : { studentId: form.recipientId, text: form.text.trim() };
       await sendMessage(payload);
-      setForm({ recipientId: '', text: '' });
       setShowCompose(false);
       loadAll();
     } catch (err) {
@@ -156,7 +267,7 @@ export default function MessagesPage() {
         <h1 className={s.pageTitle} style={{ margin: 0 }}>Сообщения</h1>
         <button
           className={styles.composeBtn}
-          onClick={() => { setShowCompose((v) => !v); setSendError(''); }}
+          onClick={() => setShowCompose((v) => !v)}
         >
           {showCompose ? 'Отмена' : '✏ Написать'}
         </button>
@@ -165,54 +276,14 @@ export default function MessagesPage() {
       {showCompose && (
         <form className={styles.composeForm} onSubmit={handleSend}>
           <div className={styles.formRow}>
-            <label className={styles.formLabel}>Кому</label>
-            <div className={styles.recipientTypeTabs}>
-              <button
-                type="button"
-                className={`${styles.recipientTypeBtn} ${recipientType === 'user' ? styles.recipientTypeBtnActive : ''}`}
-                onClick={() => { setRecipientType('user'); setForm({ ...form, recipientId: '' }); }}
-              >
-                Пользователю
-              </button>
-              <button
-                type="button"
-                className={`${styles.recipientTypeBtn} ${recipientType === 'group' ? styles.recipientTypeBtnActive : ''}`}
-                onClick={() => { setRecipientType('group'); setForm({ ...form, recipientId: '' }); }}
-              >
-                Группе
-              </button>
-            </div>
-          </div>
-
-          <div className={styles.formRow}>
             <label className={styles.formLabel}>
-              {recipientType === 'user' ? 'Пользователь' : 'Группа'}
+              {isStudent ? 'Получатель' : 'Получатель (пользователь или группа)'}
             </label>
-            {recipientType === 'user' ? (
-              <select
-                className={styles.select}
-                value={form.recipientId}
-                onChange={(e) => setForm({ ...form, recipientId: e.target.value })}
-              >
-                <option value="">— выберите пользователя —</option>
-                {users.map((u) => (
-                  <option key={u.id} value={u.id}>
-                    {u.fullName} ({ROLE_LABELS[u.role] || u.role})
-                  </option>
-                ))}
-              </select>
-            ) : (
-              <select
-                className={styles.select}
-                value={form.recipientId}
-                onChange={(e) => setForm({ ...form, recipientId: e.target.value })}
-              >
-                <option value="">— выберите группу —</option>
-                {groups.map((g) => (
-                  <option key={g.id} value={g.id}>{g.name}</option>
-                ))}
-              </select>
-            )}
+            <RecipientInput
+              isStudent={isStudent}
+              onSelect={(id, kind) => { setRecipientId(id); setRecipientKind(kind); setSendError(''); }}
+              onClear={() => { setRecipientId(null); setRecipientKind('user'); }}
+            />
           </div>
 
           <div className={styles.formRow}>
@@ -221,8 +292,8 @@ export default function MessagesPage() {
               className={styles.textarea}
               rows={4}
               placeholder="Текст сообщения..."
-              value={form.text}
-              onChange={(e) => setForm({ ...form, text: e.target.value })}
+              value={msgText}
+              onChange={(e) => setMsgText(e.target.value)}
             />
           </div>
 
@@ -255,7 +326,6 @@ export default function MessagesPage() {
 
       {!loading && !error && tab === 'inbox' && (
         <>
-          {/* Актуальные */}
           <div className={styles.sectionHeader}>
             <span className={styles.sectionTitle}>Актуальные</span>
             <span className={styles.sectionCount}>{relevant.length}</span>
@@ -271,7 +341,6 @@ export default function MessagesPage() {
             </div>
           )}
 
-          {/* Неактуальные */}
           <button
             className={styles.irrelevantToggle}
             onClick={() => setShowIrrelevant((v) => !v)}

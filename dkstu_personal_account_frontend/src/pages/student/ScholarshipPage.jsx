@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { getScholarship } from '../../api/students';
+import { formatDate } from '../../utils/date';
 import s from './shared.module.css';
 import styles from './ScholarshipPage.module.css';
 
@@ -19,15 +20,6 @@ const DIRECTION_LABELS = {
   sports: 'Спортивная деятельность',
   cultural: 'Культурная деятельность',
 };
-
-function formatDate(dateStr) {
-  if (!dateStr) return null;
-  return new Date(dateStr).toLocaleDateString('ru-RU', {
-    day: 'numeric',
-    month: 'long',
-    year: 'numeric',
-  });
-}
 
 function formatAmount(amount) {
   return new Intl.NumberFormat('ru-RU', {

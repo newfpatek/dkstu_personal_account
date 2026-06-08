@@ -26,4 +26,4 @@ docker compose down
 // Тест авторизации
 
 Студент: email: student_test@test.ru, password: 123456;
-Преподаватель: email: teacher@test.ru, password: teacher123;
+Преподаватель: email: teacher@test.ru, password: teacher123; 

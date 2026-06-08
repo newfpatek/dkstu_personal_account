@@ -286,6 +286,114 @@
   color: var(--accent);
 }
 
+.recipientWrap {
+  position: relative;
+  max-width: 400px;
+}
+
+.searchInput {
+  width: 100%;
+  padding: 9px 32px 9px 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 14px;
+  background: var(--bg);
+  color: var(--text-h);
+  box-sizing: border-box;
+  font-family: inherit;
+  transition: border-color 0.15s;
+}
+
+.searchInput:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.searchInputSelected {
+  border-color: var(--accent);
+  background: var(--accent-bg);
+}
+
+.clearRecipientBtn {
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--text);
+  font-size: 18px;
+  line-height: 1;
+  padding: 0 4px;
+  transition: color 0.15s;
+}
+
+.clearRecipientBtn:hover {
+  color: var(--accent);
+}
+
+.suggestDrop {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: var(--shadow);
+  z-index: 100;
+  overflow: hidden;
+  max-height: 240px;
+  overflow-y: auto;
+}
+
+.suggestItem {
+  padding: 10px 14px;
+  cursor: pointer;
+  border-bottom: 1px solid var(--border);
+  transition: background 0.1s;
+}
+
+.suggestItem:last-child {
+  border-bottom: none;
+}
+
+.suggestItem:hover {
+  background: var(--accent-bg);
+}
+
+.suggestName {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 14px;
+  color: var(--text-h);
+}
+
+.resultTypeBadge {
+  display: inline-block;
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 500;
+  background: var(--accent-bg);
+  color: var(--accent);
+  flex-shrink: 0;
+}
+
+.suggestSub {
+  font-size: 12px;
+  color: var(--text);
+  margin-top: 2px;
+}
+
+.searchHint {
+  font-size: 13px;
+  color: var(--text);
+  padding: 10px 14px;
+}
+
 .recipientTypeTabs {
   display: flex;
   gap: 4px;

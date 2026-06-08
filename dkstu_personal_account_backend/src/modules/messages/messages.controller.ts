@@ -1,5 +1,5 @@
 import {
-  Controller, Post, Get, Patch, Body, Request, Param,
+  Controller, Post, Get, Patch, Body, Request, Param, Query,
   UseGuards, HttpCode, HttpStatus,
 } from '@nestjs/common';
 import { MessagesService } from './messages.service';
@@ -20,13 +20,18 @@ export class MessagesController {
   }
 
   @Get('users')
-  getUsers(@Request() req: any) {
-    return this.messagesService.getUsers(req.user.id);
+  getUsers(@Request() req: any, @Query('q') q?: string) {
+    return this.messagesService.getUsers(req.user.id, q);
   }
 
   @Get('groups')
-  getGroups(@Request() req: any) {
-    return this.messagesService.getGroupsForUser(req.user.id, req.user.role);
+  getGroups(@Request() req: any, @Query('q') q?: string) {
+    return this.messagesService.getGroupsForUser(req.user.id, req.user.role, q);
+  }
+
+  @Get('search')
+  search(@Request() req: any, @Query('q') q = '') {
+    return this.messagesService.searchCombined(req.user.id, req.user.role, q);
   }
 
   @Get('inbox')

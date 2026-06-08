@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { getPortfolio, uploadPortfolioItem, deletePortfolioItem, downloadPortfolio } from '../../api/students';
+import { formatDateShort as formatDate } from '../../utils/date';
 import s from './shared.module.css';
 import styles from './PortfolioPage.module.css';
 
@@ -27,13 +28,6 @@ function formatSize(bytes) {
   return `${(bytes / (1024 * 1024)).toFixed(1)} МБ`;
 }
 
-function formatDate(dateStr) {
-  return new Date(dateStr).toLocaleDateString('ru-RU', {
-    day: 'numeric',
-    month: 'short',
-    year: 'numeric',
-  });
-}
 
 export default function PortfolioPage() {
   const [items, setItems] = useState([]);
