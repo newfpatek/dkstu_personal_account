@@ -41,3 +41,9 @@ export const downloadPortfolio = (params) =>
     params,
     responseType: 'blob',
   });
+
+export const fetchPortfolioFile = (itemId, inline = false) =>
+  apiClient.get(`/students/me/portfolio/${itemId}/file`, {
+    params: inline ? { inline: 'true' } : {},
+    responseType: 'blob',
+  });

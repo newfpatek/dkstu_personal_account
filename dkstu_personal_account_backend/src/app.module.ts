@@ -26,6 +26,7 @@ import { TeacherModule } from './modules/teacher/teacher.module';
         synchronize: false,
         migrations: [__dirname + '/migrations/*{.ts,.js}'],
         migrationsRun: true,
+        extra: { options: '-c TimeZone=UTC' },
       }),
     }),
     AuthModule,

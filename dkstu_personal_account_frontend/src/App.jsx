@@ -3,6 +3,7 @@ import LoginPage from './pages/LoginPage';
 import ProtectedRoute from './components/ProtectedRoute';
 import StudentPage from './pages/StudentPage';
 import TeacherPage from './pages/TeacherPage';
+import StaffPage from './pages/StaffPage';
 import AdminPage from './pages/AdminPage';
 import GradesPage from './pages/student/GradesPage';
 import ScholarshipPage from './pages/student/ScholarshipPage';
@@ -10,6 +11,7 @@ import PortfolioPage from './pages/student/PortfolioPage';
 import MessagesPage from './pages/student/MessagesPage';
 import GroupPage from './pages/student/GroupPage';
 import TeacherGroupsPage from './pages/teacher/TeacherGroupsPage';
+import StaffStudentsPage from './pages/staff/StaffStudentsPage';
 
 export default function App() {
   return (
@@ -50,10 +52,14 @@ export default function App() {
           path="/staff"
           element={
             <ProtectedRoute allowedRoles={['staff']}>
-              <div style={{ padding: 32 }}><h1>Кабинет сотрудника</h1></div>
+              <StaffPage />
             </ProtectedRoute>
           }
-        />
+        >
+          <Route index element={<Navigate to="students" replace />} />
+          <Route path="students" element={<StaffStudentsPage />} />
+          <Route path="messages" element={<MessagesPage />} />
+        </Route>
 
         <Route
           path="/admin"

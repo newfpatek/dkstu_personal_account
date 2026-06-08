@@ -1,0 +1,352 @@
+.splitLayout {
+  display: grid;
+  grid-template-columns: 280px 1fr;
+  gap: 24px;
+  align-items: start;
+}
+
+/* ── Left panel ── */
+.leftPanel {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.searchWrap {
+  padding: 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.searchInput {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 14px;
+  color: var(--text-h);
+  background: var(--bg);
+  outline: none;
+  transition: border-color 0.15s;
+}
+
+.searchInput:focus {
+  border-color: var(--accent);
+}
+
+.studentList {
+  max-height: calc(100vh - 230px);
+  overflow-y: auto;
+}
+
+.studentItem {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 10px 14px;
+  cursor: pointer;
+  border-bottom: 1px solid var(--border);
+  transition: background 0.12s;
+}
+
+.studentItem:last-child {
+  border-bottom: none;
+}
+
+.studentItem:hover {
+  background: var(--accent-bg);
+}
+
+.studentItemSelected {
+  background: var(--accent-bg);
+  border-left: 3px solid var(--accent);
+  padding-left: 11px;
+}
+
+.studentName {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-h);
+}
+
+.studentMeta {
+  font-size: 12px;
+  color: var(--text);
+  opacity: 0.7;
+}
+
+.paidTag {
+  display: inline-block;
+  padding: 1px 6px;
+  border-radius: 3px;
+  font-size: 11px;
+  background: rgba(234, 179, 8, 0.12);
+  color: #b45309;
+  margin-left: 6px;
+  font-weight: 500;
+}
+
+.emptyList {
+  padding: 24px 14px;
+  font-size: 13px;
+  color: var(--text);
+  text-align: center;
+  opacity: 0.7;
+}
+
+/* ── Right panel ── */
+.rightPanel {
+  min-height: 200px;
+}
+
+.placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 300px;
+  border: 1px dashed var(--border);
+  border-radius: 10px;
+  font-size: 14px;
+  color: var(--text);
+  opacity: 0.6;
+}
+
+/* Profile header */
+.profileHeader {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+  margin-bottom: 20px;
+  padding-bottom: 20px;
+  border-bottom: 1px solid var(--border);
+}
+
+.profileAvatar {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: var(--accent-bg);
+  border: 1px solid var(--accent-border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--accent);
+  flex-shrink: 0;
+}
+
+.profileInfo {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.profileFullName {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--text-h);
+}
+
+.profileEmail {
+  font-size: 13px;
+  color: var(--text);
+  opacity: 0.75;
+}
+
+.profileGroups {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-top: 4px;
+}
+
+.groupTag {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  background: var(--accent-bg);
+  color: var(--accent);
+  font-weight: 500;
+  border: 1px solid var(--accent-border);
+}
+
+/* Scholarship cards */
+.scholarshipCards {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.scholarshipCard {
+  padding: 14px 16px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.schType {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-h);
+}
+
+.schDirection {
+  font-size: 12px;
+  color: var(--text);
+  opacity: 0.75;
+}
+
+.schAmount {
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--accent);
+  letter-spacing: -0.4px;
+}
+
+.schMeta {
+  font-size: 12px;
+  color: var(--text);
+  opacity: 0.7;
+}
+
+.schStatus {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--text);
+}
+
+.statusDot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+/* Portfolio list */
+.portfolioList {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.portfolioItem {
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.portfolioTitle {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-h);
+}
+
+.portfolioMeta {
+  font-size: 12px;
+  color: var(--text);
+  opacity: 0.7;
+  margin-top: 3px;
+}
+
+.categoryBadge {
+  display: inline-block;
+  padding: 2px 7px;
+  border-radius: 4px;
+  font-size: 11px;
+  background: var(--accent-bg);
+  color: var(--accent);
+  margin-left: 8px;
+  font-weight: 500;
+}
+
+/* Portfolio filters */
+.portFilterRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.portFilterBtn {
+  padding: 5px 14px;
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  background: transparent;
+  color: var(--text);
+  font-size: 13px;
+  cursor: pointer;
+  transition: border-color 0.15s, color 0.15s, background 0.15s;
+}
+
+.portFilterBtn:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.portFilterActive {
+  background: var(--accent-bg);
+  border-color: var(--accent-border);
+  color: var(--accent);
+  font-weight: 500;
+}
+
+.portSearchInput {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 9px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-size: 14px;
+  color: var(--text-h);
+  background: var(--bg);
+  margin-bottom: 16px;
+  outline: none;
+  transition: border-color 0.15s;
+}
+
+.portSearchInput:focus {
+  border-color: var(--accent);
+}
+
+.fileActionBtn {
+  padding: 4px 10px;
+  border: 1px solid var(--accent-border);
+  border-radius: 5px;
+  background: transparent;
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.15s;
+  white-space: nowrap;
+}
+
+.fileActionBtn:hover:not(:disabled) {
+  background: var(--accent-bg);
+}
+
+.fileActionBtn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.infoBox {
+  padding: 12px 16px;
+  background: rgba(37, 99, 235, 0.06);
+  border: 1px solid rgba(37, 99, 235, 0.2);
+  border-radius: 8px;
+  font-size: 14px;
+  color: var(--text);
+  margin-bottom: 16px;
+}

@@ -27,3 +27,4 @@ docker compose down
 
 Студент: email: student_test@test.ru, password: 123456;
 Преподаватель: email: teacher@test.ru, password: teacher123; 
+Сотрудник вуза: email: staff@test.com, password: 123456;

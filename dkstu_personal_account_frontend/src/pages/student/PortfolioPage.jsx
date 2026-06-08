@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { getPortfolio, uploadPortfolioItem, deletePortfolioItem, downloadPortfolio } from '../../api/students';
+import { getPortfolio, uploadPortfolioItem, deletePortfolioItem, downloadPortfolio, fetchPortfolioFile } from '../../api/students';
 import { formatDateShort as formatDate } from '../../utils/date';
 import s from './shared.module.css';
 import styles from './PortfolioPage.module.css';
@@ -28,6 +28,22 @@ function formatSize(bytes) {
   return `${(bytes / (1024 * 1024)).toFixed(1)} МБ`;
 }
 
+function openBlob(data, contentType, fileName, inline) {
+  const blob = new Blob([data], { type: contentType || 'application/octet-stream' });
+  const url = URL.createObjectURL(blob);
+  if (inline) {
+    window.open(url, '_blank');
+    setTimeout(() => URL.revokeObjectURL(url), 60000);
+  } else {
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = fileName || 'file';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }
+}
 
 export default function PortfolioPage() {
   const [items, setItems] = useState([]);
@@ -38,6 +54,8 @@ export default function PortfolioPage() {
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState('');
   const [deletingId, setDeletingId] = useState(null);
+  const [fileLoadingId, setFileLoadingId] = useState(null);
+  const [search, setSearch] = useState('');
 
   const [form, setForm] = useState({ title: '', category: 'academic', description: '' });
   const fileRef = useRef(null);
@@ -129,6 +147,19 @@ export default function PortfolioPage() {
       }
     } finally {
       setDownloading(false);
+    }
+  };
+
+  const handleFileAction = async (item, inline) => {
+    setFileLoadingId(item.id);
+    try {
+      const res = await fetchPortfolioFile(item.id, inline);
+      const contentType = res.headers['content-type'];
+      openBlob(res.data, contentType, item.fileName, inline);
+    } catch {
+      alert('Не удалось загрузить файл');
+    } finally {
+      setFileLoadingId(null);
     }
   };
 
@@ -252,6 +283,14 @@ export default function PortfolioPage() {
         ))}
       </div>
 
+      <input
+        className={styles.searchInput}
+        type="text"
+        placeholder="Поиск по названию или описанию..."
+        value={search}
+        onChange={(e) => setSearch(e.target.value)}
+      />
+
       {loading && <p className={s.empty}>Загрузка...</p>}
       {error && <p className={s.errorMsg}>{error}</p>}
 
@@ -266,9 +305,22 @@ export default function PortfolioPage() {
         </div>
       )}
 
-      {!loading && items.length > 0 && (
-        <div className={styles.list}>
-          {items.map((item) => (
+      {!loading && items.length > 0 && (() => {
+        const q = search.trim().toLowerCase();
+        const visible = q
+          ? items.filter(
+              (i) =>
+                i.title.toLowerCase().includes(q) ||
+                (i.description || '').toLowerCase().includes(q),
+            )
+          : items;
+        return (
+          <>
+            {visible.length === 0 && (
+              <p className={s.empty}>Ничего не найдено по запросу «{search.trim()}»</p>
+            )}
+            <div className={styles.list}>
+              {visible.map((item) => (
             <div key={item.id} className={styles.card}>
               <div className={styles.cardLeft}>
                 <span
@@ -291,18 +343,32 @@ export default function PortfolioPage() {
                 </div>
               </div>
 
-              <button
-                className={styles.deleteBtn}
-                onClick={() => handleDelete(item.id)}
-                disabled={deletingId === item.id}
-                title="Удалить"
-              >
-                {deletingId === item.id ? '...' : '✕'}
-              </button>
+              <div className={styles.cardActions}>
+                {item.fileName && (
+                  <button
+                    className={styles.fileBtn}
+                    onClick={() => handleFileAction(item, true)}
+                    disabled={fileLoadingId === item.id}
+                    title="Открыть в браузере"
+                  >
+                    Открыть
+                  </button>
+                )}
+                <button
+                  className={styles.deleteBtn}
+                  onClick={() => handleDelete(item.id)}
+                  disabled={deletingId === item.id}
+                  title="Удалить"
+                >
+                  {deletingId === item.id ? '...' : '✕'}
+                </button>
+              </div>
             </div>
-          ))}
-        </div>
-      )}
+              ))}
+            </div>
+          </>
+        );
+      })()}
     </div>
   );
 }

@@ -163,6 +163,24 @@
   font-weight: 500;
 }
 
+.searchInput {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 9px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-size: 14px;
+  color: var(--text-h);
+  background: var(--bg);
+  margin-bottom: 16px;
+  outline: none;
+  transition: border-color 0.15s;
+}
+
+.searchInput:focus {
+  border-color: var(--accent);
+}
+
 .emptyBox {
   padding: 40px;
   text-align: center;
@@ -235,6 +253,35 @@
   opacity: 0.7;
 }
 
+.cardActions {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.fileBtn {
+  padding: 5px 10px;
+  border: 1px solid var(--accent-border);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.15s;
+}
+
+.fileBtn:hover:not(:disabled) {
+  background: var(--accent-bg);
+}
+
+.fileBtn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 .deleteBtn {
   flex-shrink: 0;
   width: 28px;
@@ -249,6 +296,7 @@
   align-items: center;
   justify-content: center;
   transition: border-color 0.15s, color 0.15s;
+  align-self: flex-end;
 }
 
 .deleteBtn:hover:not(:disabled) {

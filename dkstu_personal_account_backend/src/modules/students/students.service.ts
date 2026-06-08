@@ -183,6 +183,26 @@ export class StudentsService {
     await archive.finalize();
   }
 
+  async servePortfolioFile(
+    studentId: string,
+    itemId: string,
+    res: Response,
+    inline: boolean,
+  ): Promise<void> {
+    const item = await this.portfolioRepo.findOne({ where: { id: itemId, studentId } });
+    if (!item || !item.filePath)
+      throw new NotFoundException('Файл не найден');
+    if (!fs.existsSync(item.filePath))
+      throw new NotFoundException('Файл не найден на диске');
+
+    const fileName = item.fileName || path.basename(item.filePath);
+    const disposition = inline
+      ? `inline; filename="${encodeURIComponent(fileName)}"`
+      : `attachment; filename="${encodeURIComponent(fileName)}"`;
+    res.setHeader('Content-Disposition', disposition);
+    res.sendFile(path.resolve(item.filePath));
+  }
+
   async deletePortfolioItem(studentId: string, itemId: string) {
     const item = await this.portfolioRepo.findOne({ where: { id: itemId } });
     if (!item) throw new NotFoundException('Элемент портфолио не найден');
@@ -206,6 +226,49 @@ export class StudentsService {
 
     const { password, ...safe } = user as any;
     return safe;
+  }
+
+  async searchStudents(q?: string, groupId?: string) {
+    const qb = this.userRepo
+      .createQueryBuilder('u')
+      .leftJoinAndSelect('u.groups', 'g')
+      .where("u.role = 'student'");
+
+    if (q) {
+      qb.andWhere('(u.name ILIKE :q OR u.email ILIKE :q)', { q: `%${q}%` });
+    }
+    if (groupId) {
+      qb.andWhere('g.id = :groupId', { groupId });
+    }
+
+    const users = await qb.orderBy('u.name', 'ASC').getMany();
+    return users.map(({ password, ...safe }: any) => safe);
+  }
+
+  async getStudentProfileById(studentId: string) {
+    const user = await this.userRepo
+      .createQueryBuilder('u')
+      .leftJoinAndSelect('u.groups', 'g')
+      .where('u.id = :studentId', { studentId })
+      .getOne();
+
+    if (!user) throw new NotFoundException('Студент не найден');
+
+    const groupIds = (user.groups ?? []).map((g) => g.id);
+    const roleEntries = groupIds.length > 0
+      ? await this.userGroupRoleRepo.find({ where: { userId: studentId } })
+      : [];
+
+    const { password, ...safe } = user as any;
+    return {
+      ...safe,
+      groups: (user.groups ?? []).map((g) => ({
+        id: g.id,
+        name: g.name,
+        year: g.year,
+        groupRole: roleEntries.find((r) => r.groupId === g.id)?.label ?? null,
+      })),
+    };
   }
 
   async getMyGroup(userId: string) {
