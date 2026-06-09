@@ -7,14 +7,13 @@ import { ScholarshipBaseAmount } from '../students/entities/scholarship-base-amo
 import { GradeRecord } from '../students/entities/grade-record.entity';
 import { UserGroupRole } from '../groups/entities/user-group-role.entity';
 import { GroupSemesterDiscipline } from '../groups/entities/group-semester-discipline.entity';
-import { TeacherAssignment } from '../teacher/entities/teacher-assignment.entity';
 import { Discipline } from '../students/entities/discipline.entity';
 import { AdminService } from './admin.service';
 import { AdminController } from './admin.controller';
 
 @Module({
   imports: [TypeOrmModule.forFeature([
-    User, Group, Scholarship, ScholarshipBaseAmount, GradeRecord, UserGroupRole, GroupSemesterDiscipline, TeacherAssignment, Discipline,
+    User, Group, Scholarship, ScholarshipBaseAmount, GradeRecord, UserGroupRole, GroupSemesterDiscipline, Discipline,
   ])],
   providers: [AdminService],
   controllers: [AdminController],

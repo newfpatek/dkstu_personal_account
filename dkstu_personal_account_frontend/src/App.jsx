@@ -15,6 +15,7 @@ import MessagesPage from './pages/student/MessagesPage';
 import GroupPage from './pages/student/GroupPage';
 import TeacherGroupsPage from './pages/teacher/TeacherGroupsPage';
 import StaffStudentsPage from './pages/staff/StaffStudentsPage';
+import StaffGroupsPage from './pages/staff/StaffGroupsPage';
 
 export default function App() {
   return (
@@ -46,7 +47,8 @@ export default function App() {
             </ProtectedRoute>
           }
         >
-          <Route index element={<Navigate to="groups" replace />} />
+          <Route index element={<Navigate to="students" replace />} />
+          <Route path="students" element={<StaffStudentsPage />} />
           <Route path="groups" element={<TeacherGroupsPage />} />
           <Route path="messages" element={<MessagesPage />} />
         </Route>
@@ -61,6 +63,7 @@ export default function App() {
         >
           <Route index element={<Navigate to="students" replace />} />
           <Route path="students" element={<StaffStudentsPage />} />
+          <Route path="groups" element={<StaffGroupsPage />} />
           <Route path="messages" element={<MessagesPage />} />
         </Route>
 

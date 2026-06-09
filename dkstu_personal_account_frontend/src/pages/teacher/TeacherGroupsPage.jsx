@@ -1,153 +1,173 @@
 import { useState, useEffect } from 'react';
-import { getTeacherGroups, getTeacherGroupStudents } from '../../api/teacher';
+import { getGroups, getGroupById } from '../../api/teacher';
 import { useToast } from '../../contexts/ToastContext';
 import { getErrorMessage } from '../../utils/error';
 import s from '../student/shared.module.css';
 import styles from './TeacherGroupsPage.module.css';
 
-function StudentRow({ student, idx }) {
-  const hasDebts = student.debtCount > 0;
-  return (
-    <tr>
-      <td data-label="№" className={styles.numCell}>{idx + 1}</td>
-      <td data-label="ФИО">
-        <span>{student.fullName}</span>
-        {student.groupRole && (
-          <span className={styles.roleTag}>{student.groupRole}</span>
-        )}
-      </td>
-      <td data-label="Обучение">
-        {student.isPaid ? (
-          <span className={styles.paidBadge}>Контракт</span>
-        ) : null}
-      </td>
-      <td data-label="Оценок" className={styles.statCell}>{student.totalGrades}</td>
-      <td data-label="Долгов" className={styles.statCell}>
-        {hasDebts ? (
-          <span className={`${s.badge} ${s.debtBadge}`}>{student.debtCount}</span>
-        ) : (
-          <span className={styles.noDebts}>—</span>
-        )}
-      </td>
-    </tr>
-  );
-}
+const ROLE_LABELS = {
+  student: 'Студент',
+  teacher: 'Преподаватель',
+  staff: 'Сотрудник',
+  admin: 'Администратор',
+};
 
-function GroupCard({ group, onSelect, selected }) {
+function GroupItem({ group, selected, onSelect }) {
   return (
-    <button
-      className={`${styles.groupCard} ${selected ? styles.groupCardSelected : ''}`}
+    <div
+      className={`${styles.groupItem} ${selected ? styles.groupItemSelected : ''}`}
       onClick={() => onSelect(group.id)}
     >
       <span className={styles.groupName}>{group.name}</span>
-      <span className={styles.groupMeta}>{group.year} г.н. · {group.studentCount} чел.</span>
-    </button>
+      <span className={styles.groupMeta}>{group.year} г.н. · {group.studentCount} студ.</span>
+    </div>
   );
 }
 
 export default function TeacherGroupsPage() {
   const { showToast } = useToast();
   const [groups, setGroups] = useState([]);
-  const [selectedGroupId, setSelectedGroupId] = useState(null);
+  const [search, setSearch] = useState('');
+  const [selectedId, setSelectedId] = useState(null);
   const [detail, setDetail] = useState(null);
   const [loadingGroups, setLoadingGroups] = useState(true);
   const [loadingDetail, setLoadingDetail] = useState(false);
-  const [loadError, setLoadError] = useState(false);
 
   useEffect(() => {
-    getTeacherGroups()
-      .then((r) => {
-        setGroups(r.data);
-        if (r.data.length > 0) setSelectedGroupId(r.data[0].id);
-      })
-      .catch((err) => {
-        showToast(getErrorMessage(err, 'Не удалось загрузить группы'));
-        setLoadError(true);
-      })
+    getGroups()
+      .then((r) => setGroups(r.data))
+      .catch((err) => showToast(getErrorMessage(err, 'Не удалось загрузить группы')))
       .finally(() => setLoadingGroups(false));
   }, []);
 
   useEffect(() => {
-    if (!selectedGroupId) return;
+    if (!selectedId) return;
     setLoadingDetail(true);
     setDetail(null);
-    getTeacherGroupStudents(selectedGroupId)
+    getGroupById(selectedId)
       .then((r) => setDetail(r.data))
       .catch((err) => showToast(getErrorMessage(err, 'Не удалось загрузить состав группы')))
       .finally(() => setLoadingDetail(false));
-  }, [selectedGroupId]);
+  }, [selectedId]);
 
-  if (loadingGroups) return <p className={s.empty}>Загрузка...</p>;
-  if (loadError) return <p className={s.errorMsg}>Не удалось загрузить данные. Попробуйте обновить страницу.</p>;
+  const q = search.trim().toLowerCase();
+  const filteredGroups = q ? groups.filter((g) => g.name.toLowerCase().includes(q)) : groups;
 
-  if (groups.length === 0) {
-    return (
-      <div>
-        <h1 className={s.pageTitle}>Мои группы</h1>
-        <p className={s.empty}>Вы не привязаны ни к одной группе. Обратитесь к администратору.</p>
-      </div>
-    );
-  }
-
-  const debtTotal = detail?.students.reduce((sum, st) => sum + st.debtCount, 0) ?? 0;
-  const studentCount = detail?.students.length ?? 0;
+  const students = detail?.members.filter((m) => m.role === 'student') ?? [];
+  const others = detail?.members.filter((m) => m.role !== 'student') ?? [];
 
   return (
     <div>
-      <h1 className={s.pageTitle}>Мои группы</h1>
+      <h1 className={s.pageTitle}>Группы</h1>
 
-      <div className={styles.groupTabs}>
-        {groups.map((g) => (
-          <GroupCard
-            key={g.id}
-            group={g}
-            selected={g.id === selectedGroupId}
-            onSelect={setSelectedGroupId}
-          />
-        ))}
-      </div>
-
-      {loadingDetail && <p className={s.empty}>Загрузка состава группы...</p>}
-
-      {!loadingDetail && detail && (
-        <>
-          <div className={s.summaryRow}>
-            <div className={s.summaryCard}>
-              <span className={s.summaryLabel}>Студентов</span>
-              <span className={s.summaryValue}>{studentCount}</span>
-            </div>
-            <div className={s.summaryCard}>
-              <span className={s.summaryLabel}>Задолженностей</span>
-              <span className={`${s.summaryValue} ${debtTotal > 0 ? styles.debtValue : ''}`}>
-                {debtTotal}
-              </span>
-            </div>
+      <div className={styles.splitLayout}>
+        {/* Left panel */}
+        <div className={styles.leftPanel}>
+          <div className={styles.searchWrap}>
+            <input
+              className={styles.searchInput}
+              type="text"
+              placeholder="Поиск по названию..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
           </div>
+          <div className={styles.groupList}>
+            {loadingGroups && <p className={styles.emptyList}>Загрузка...</p>}
+            {!loadingGroups && filteredGroups.length === 0 && (
+              <p className={styles.emptyList}>Групп не найдено</p>
+            )}
+            {!loadingGroups && filteredGroups.map((g) => (
+              <GroupItem
+                key={g.id}
+                group={g}
+                selected={g.id === selectedId}
+                onSelect={setSelectedId}
+              />
+            ))}
+          </div>
+        </div>
 
-          {studentCount === 0 ? (
-            <p className={s.empty}>В группе нет студентов</p>
-          ) : (
-            <div className={styles.tableWrap}>
-              <table className={s.table}>
-                <thead>
-                  <tr>
-                    <th style={{ width: 40 }}>№</th>
-                    <th>ФИО</th>
-                    <th style={{ width: 110 }}>Тип обучения</th>
-                    <th style={{ width: 90 }}>Оценок</th>
-                    <th style={{ width: 90 }}>Долгов</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {detail.students.map((student, idx) => (
-                    <StudentRow key={student.id} student={student} idx={idx} />
-                  ))}
-                </tbody>
-              </table>
+        {/* Right panel */}
+        <div className={styles.rightPanel}>
+          {!selectedId && (
+            <div className={styles.placeholder}>Выберите группу из списка</div>
+          )}
+          {selectedId && loadingDetail && <p className={s.empty}>Загрузка...</p>}
+          {selectedId && !loadingDetail && detail && (
+            <div>
+              <h2 className={styles.groupTitle}>
+                {detail.name}
+                <span className={styles.groupYear}> {detail.year} г.н.</span>
+              </h2>
+
+              <div className={s.summaryRow} style={{ marginBottom: 20 }}>
+                <div className={s.summaryCard}>
+                  <span className={s.summaryLabel}>Студентов</span>
+                  <span className={s.summaryValue}>{students.length}</span>
+                </div>
+              </div>
+
+              {students.length === 0 ? (
+                <p className={s.empty}>В группе нет студентов</p>
+              ) : (
+                <table className={s.table} style={{ marginBottom: 24 }}>
+                  <thead>
+                    <tr>
+                      <th style={{ width: 40 }}>№</th>
+                      <th>ФИО</th>
+                      <th style={{ width: 150 }}>Роль в группе</th>
+                      <th style={{ width: 110 }}>Обучение</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {students.map((member, idx) => (
+                      <tr key={member.id}>
+                        <td data-label="№">{idx + 1}</td>
+                        <td data-label="ФИО">{member.fullName}</td>
+                        <td data-label="Роль в группе">
+                          {member.groupRole && (
+                            <span className={styles.roleTag}>{member.groupRole}</span>
+                          )}
+                        </td>
+                        <td data-label="Обучение">
+                          {member.isPaid && (
+                            <span className={styles.paidBadge}>Контракт</span>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+
+              {others.length > 0 && (
+                <>
+                  <h3 className={styles.sectionTitle}>Прочие участники</h3>
+                  <table className={s.table}>
+                    <thead>
+                      <tr>
+                        <th>ФИО</th>
+                        <th style={{ width: 130 }}>Роль</th>
+                        <th>Email</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {others.map((member) => (
+                        <tr key={member.id}>
+                          <td data-label="ФИО">{member.fullName}</td>
+                          <td data-label="Роль">{ROLE_LABELS[member.role] || member.role}</td>
+                          <td data-label="Email">{member.email}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </>
+              )}
             </div>
           )}
-        </>
-      )}
+        </div>
+      </div>
     </div>
   );
 }

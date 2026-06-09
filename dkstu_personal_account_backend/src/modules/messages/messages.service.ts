@@ -5,7 +5,6 @@ import { Message } from './entities/message.entity';
 import { MessageUserStatus } from './entities/message-user-status.entity';
 import { User } from '../users/entities/user.entity';
 import { Group } from '../groups/entities/group.entity';
-import { TeacherAssignment } from '../teacher/entities/teacher-assignment.entity';
 import { SendMessageDto } from './dto/send-message.dto';
 import { Role } from '../../auth/enums/role.enum';
 
@@ -16,7 +15,6 @@ export class MessagesService {
     @InjectRepository(MessageUserStatus) private statusRepo: Repository<MessageUserStatus>,
     @InjectRepository(User) private userRepo: Repository<User>,
     @InjectRepository(Group) private groupRepo: Repository<Group>,
-    @InjectRepository(TeacherAssignment) private assignmentRepo: Repository<TeacherAssignment>,
   ) {}
 
   async send(senderId: string, dto: SendMessageDto): Promise<Message> {

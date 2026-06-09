@@ -47,6 +47,10 @@ export default function StaffPage() {
             <span className={styles.navFull}>Студенты</span>
             <span className={styles.navShort}>Студенты</span>
           </NavLink>
+          <NavLink to="/staff/groups" className={navClass}>
+            <span className={styles.navFull}>Группы</span>
+            <span className={styles.navShort}>Группы</span>
+          </NavLink>
           <NavLink to="/staff/messages" className={navClass}>
             <span className={styles.navFull}>Сообщения</span>
             <span className={styles.navShort}>Сообщения</span>

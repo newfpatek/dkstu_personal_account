@@ -1,89 +1,158 @@
-.groupTabs {
-  display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
-  margin-bottom: 28px;
+.splitLayout {
+  display: grid;
+  grid-template-columns: 260px 1fr;
+  gap: 24px;
+  align-items: start;
 }
 
-.groupCard {
+/* ── Left panel ── */
+.leftPanel {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  overflow: hidden;
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  padding: 12px 18px;
+}
+
+.searchWrap {
+  padding: 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.searchInput {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 8px 12px;
   border: 1px solid var(--border);
-  border-radius: 8px;
-  background: transparent;
-  cursor: pointer;
-  text-align: left;
-  transition: border-color 0.15s, background 0.15s;
+  border-radius: 6px;
+  font-size: 14px;
+  color: var(--text-h);
+  background: var(--bg);
+  outline: none;
+  transition: border-color 0.15s;
 }
 
-.groupCard:hover {
-  border-color: var(--accent-border);
-  background: var(--accent-bg);
-}
-
-.groupCardSelected {
+.searchInput:focus {
   border-color: var(--accent);
+}
+
+.groupList {
+  max-height: calc(100vh - 230px);
+  overflow-y: auto;
+}
+
+.groupItem {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 10px 14px;
+  cursor: pointer;
+  border-bottom: 1px solid var(--border);
+  transition: background 0.12s;
+}
+
+.groupItem:last-child {
+  border-bottom: none;
+}
+
+.groupItem:hover {
   background: var(--accent-bg);
+}
+
+.groupItemSelected {
+  background: var(--accent-bg);
+  border-left: 3px solid var(--accent);
+  padding-left: 11px;
 }
 
 .groupName {
-  font-size: 15px;
-  font-weight: 600;
+  font-size: 14px;
+  font-weight: 500;
   color: var(--text-h);
 }
 
 .groupMeta {
   font-size: 12px;
   color: var(--text);
+  opacity: 0.7;
 }
 
-.tableWrap {
-  overflow-x: auto;
+.emptyList {
+  padding: 24px 14px;
+  font-size: 13px;
+  color: var(--text);
+  text-align: center;
+  opacity: 0.7;
 }
 
-.numCell {
+/* ── Right panel ── */
+.rightPanel {
+  min-height: 200px;
+}
+
+.placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 300px;
+  border: 1px dashed var(--border);
+  border-radius: 10px;
+  font-size: 14px;
+  color: var(--text);
+  opacity: 0.6;
+}
+
+.groupTitle {
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--text-h);
+  margin: 0 0 16px;
+}
+
+.groupYear {
+  font-size: 14px;
+  font-weight: 400;
+  color: var(--text);
+  opacity: 0.6;
+}
+
+.sectionTitle {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
   color: var(--text);
   opacity: 0.5;
-  font-size: 13px;
-  text-align: center;
-}
-
-.statCell {
-  text-align: center;
-  font-size: 14px;
-  color: var(--text-h);
+  margin: 0 0 10px;
 }
 
 .roleTag {
   display: inline-block;
-  margin-left: 8px;
-  padding: 2px 10px;
-  background: var(--accent-bg);
-  border: 1px solid var(--accent-border);
-  border-radius: 12px;
+  padding: 2px 8px;
+  border-radius: 4px;
   font-size: 12px;
-  font-weight: 500;
+  background: var(--accent-bg);
   color: var(--accent);
-  white-space: nowrap;
+  font-weight: 500;
+  border: 1px solid var(--accent-border);
 }
 
 .paidBadge {
   display: inline-block;
-  padding: 2px 10px;
-  background: rgba(161, 161, 170, 0.15);
-  border: 1px solid rgba(161, 161, 170, 0.3);
-  border-radius: 12px;
-  font-size: 12px;
-  color: var(--text);
+  padding: 2px 7px;
+  border-radius: 3px;
+  font-size: 11px;
+  background: rgba(234, 179, 8, 0.12);
+  color: #b45309;
+  font-weight: 500;
 }
 
-.noDebts {
-  color: var(--text);
-  opacity: 0.4;
-}
+@media (max-width: 768px) {
+  .splitLayout {
+    grid-template-columns: 1fr;
+  }
 
-.debtValue {
-  color: #dc2626;
+  .groupList {
+    max-height: 250px;
+  }
 }

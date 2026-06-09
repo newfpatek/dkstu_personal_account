@@ -1,4 +1,4 @@
-import { Controller, Get, Param, Request, UseGuards } from '@nestjs/common';
+import { Controller, Get, Param, UseGuards } from '@nestjs/common';
 import { TeacherService } from './teacher.service';
 import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../../auth/guards/roles.guard';
@@ -12,12 +12,14 @@ export class TeacherController {
   constructor(private readonly teacherService: TeacherService) {}
 
   @Get('groups')
-  getMyGroups(@Request() req) {
-    return this.teacherService.getMyGroups(req.user.id);
+  @Roles(Role.TEACHER, Role.STAFF)
+  getAllGroups() {
+    return this.teacherService.getAllGroups();
   }
 
-  @Get('groups/:id/students')
-  getGroupStudents(@Request() req, @Param('id') groupId: string) {
-    return this.teacherService.getGroupStudents(req.user.id, groupId);
+  @Get('groups/:id')
+  @Roles(Role.TEACHER, Role.STAFF)
+  getGroupById(@Param('id') id: string) {
+    return this.teacherService.getGroupById(id);
   }
 }

@@ -208,9 +208,9 @@ export class StudentsController {
     return this.studentsService.deletePortfolioItem(req.user.id, id);
   }
 
-  // ── Staff / Admin: search & view any student ─────────────────────────────
+  // ── Staff / Admin / Teacher: search & view any student ──────────────────
 
-  @Roles(Role.STAFF, Role.ADMIN)
+  @Roles(Role.STAFF, Role.ADMIN, Role.TEACHER)
   @Get()
   searchStudents(
     @Query('q') q?: string,
@@ -219,19 +219,19 @@ export class StudentsController {
     return this.studentsService.searchStudents(q, groupId);
   }
 
-  @Roles(Role.STAFF, Role.ADMIN)
+  @Roles(Role.STAFF, Role.ADMIN, Role.TEACHER)
   @Get(':id/profile')
   getStudentProfile(@Param('id') id: string) {
     return this.studentsService.getStudentProfileById(id);
   }
 
-  @Roles(Role.STAFF, Role.ADMIN)
+  @Roles(Role.STAFF, Role.ADMIN, Role.TEACHER)
   @Get(':id/grades/all')
   getStudentAllGrades(@Param('id') id: string) {
     return this.studentsService.getLatestGradesPerDiscipline(id);
   }
 
-  @Roles(Role.STAFF, Role.ADMIN)
+  @Roles(Role.STAFF, Role.ADMIN, Role.TEACHER)
   @Get(':id/grades')
   getStudentGrades(
     @Param('id') id: string,
@@ -245,13 +245,13 @@ export class StudentsController {
     );
   }
 
-  @Roles(Role.STAFF, Role.ADMIN)
+  @Roles(Role.STAFF, Role.ADMIN, Role.TEACHER)
   @Get(':id/scholarship')
   getStudentScholarship(@Param('id') id: string) {
     return this.studentsService.getScholarship(id);
   }
 
-  @Roles(Role.STAFF, Role.ADMIN)
+  @Roles(Role.STAFF, Role.ADMIN, Role.TEACHER)
   @Get(':studentId/portfolio/:itemId/file')
   serveStudentPortfolioFile(
     @Param('studentId') studentId: string,
@@ -262,7 +262,7 @@ export class StudentsController {
     return this.studentsService.servePortfolioFile(studentId, itemId, res, inline === 'true');
   }
 
-  @Roles(Role.STAFF, Role.ADMIN)
+  @Roles(Role.STAFF, Role.ADMIN, Role.TEACHER)
   @Get(':id/portfolio')
   getStudentPortfolio(
     @Param('id') id: string,

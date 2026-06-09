@@ -65,16 +65,6 @@ export const importGroupDisciplines = (file) => {
   return api.post('/admin/group-disciplines/import', form);
 };
 
-// Teacher assignments
-export const getTeacherAssignments = (params) =>
-  api.get('/admin/teacher-assignments', { params });
-
-export const createTeacherAssignment = (data) =>
-  api.post('/admin/teacher-assignments', data);
-
-export const deleteTeacherAssignment = (id) =>
-  api.delete(`/admin/teacher-assignments/${id}`);
-
 export const getDisciplines = () => api.get('/admin/disciplines');
 
 // Scholarship import

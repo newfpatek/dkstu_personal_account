@@ -4,6 +4,7 @@ import {
   ConflictException,
   BadRequestException,
 } from '@nestjs/common';
+import { OnModuleInit } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, IsNull } from 'typeorm';
 import * as bcrypt from 'bcrypt';
@@ -16,7 +17,6 @@ import { ScholarshipType } from '../students/enums/scholarship-type.enum';
 import { EnhancedDirection } from '../students/enums/enhanced-direction.enum';
 import { UserGroupRole } from '../groups/entities/user-group-role.entity';
 import { GroupSemesterDiscipline } from '../groups/entities/group-semester-discipline.entity';
-import { TeacherAssignment } from '../teacher/entities/teacher-assignment.entity';
 import { Discipline } from '../students/entities/discipline.entity';
 import { DisciplineType } from '../students/enums/discipline-type.enum';
 import { AssignGroupDisciplinesDto } from './dto/assign-group-disciplines.dto';
@@ -27,10 +27,9 @@ import { CreateGroupDto } from './dto/create-group.dto';
 import { SetBaseAmountDto } from './dto/set-base-amount.dto';
 import { AssignScholarshipDto } from './dto/assign-scholarship.dto';
 import { UpdateScholarshipDto } from './dto/update-scholarship.dto';
-import { CreateTeacherAssignmentDto } from './dto/create-teacher-assignment.dto';
 
 @Injectable()
-export class AdminService {
+export class AdminService implements OnModuleInit {
   constructor(
     @InjectRepository(User)
     private readonly userRepo: Repository<User>,
@@ -44,13 +43,22 @@ export class AdminService {
     private readonly gradeRecordRepo: Repository<GradeRecord>,
     @InjectRepository(UserGroupRole)
     private readonly userGroupRoleRepo: Repository<UserGroupRole>,
-    @InjectRepository(TeacherAssignment)
-    private readonly teacherAssignmentRepo: Repository<TeacherAssignment>,
     @InjectRepository(Discipline)
     private readonly disciplineRepo: Repository<Discipline>,
     @InjectRepository(GroupSemesterDiscipline)
     private readonly groupSemDisciplineRepo: Repository<GroupSemesterDiscipline>,
   ) {}
+
+  async onModuleInit() {
+    const academic = await this.baseAmountRepo.findOne({
+      where: { type: ScholarshipType.ACADEMIC, direction: IsNull() },
+    });
+    if (academic) {
+      const amount = Number(academic.amount);
+      await this.upsertBaseAmount(ScholarshipType.ACADEMIC_COEFF_14, null, Math.round(amount * 1.4 * 100) / 100);
+      await this.upsertBaseAmount(ScholarshipType.ACADEMIC_COEFF_15, null, Math.round(amount * 1.5 * 100) / 100);
+    }
+  }
 
   // ─── Users ───────────────────────────────────────────────────────────────
 
@@ -224,13 +232,30 @@ export class AdminService {
 
   async setBaseAmount(dto: SetBaseAmountDto): Promise<ScholarshipBaseAmount> {
     const direction = dto.direction ?? null;
+    const saved = await this.upsertBaseAmount(dto.type, direction, dto.amount);
+
+    if (dto.type === ScholarshipType.ACADEMIC && direction === null) {
+      const coeff14 = Math.round(dto.amount * 1.4 * 100) / 100;
+      const coeff15 = Math.round(dto.amount * 1.5 * 100) / 100;
+      await this.upsertBaseAmount(ScholarshipType.ACADEMIC_COEFF_14, null, coeff14);
+      await this.upsertBaseAmount(ScholarshipType.ACADEMIC_COEFF_15, null, coeff15);
+    }
+
+    return saved;
+  }
+
+  private async upsertBaseAmount(
+    type: ScholarshipType,
+    direction: string | null,
+    amount: number,
+  ): Promise<ScholarshipBaseAmount> {
     let record = await this.baseAmountRepo.findOne({
-      where: { type: dto.type, direction: direction === null ? IsNull() : direction },
+      where: { type, direction: direction === null ? IsNull() : direction },
     });
     if (record) {
-      record.amount = dto.amount;
+      record.amount = amount;
     } else {
-      record = this.baseAmountRepo.create({ type: dto.type, amount: dto.amount, direction });
+      record = this.baseAmountRepo.create({ type, amount, direction });
     }
     return this.baseAmountRepo.save(record);
   }
@@ -429,60 +454,6 @@ export class AdminService {
       });
     }
     return records;
-  }
-
-  // ─── Teacher assignments ──────────────────────────────────────────────────
-
-  async createTeacherAssignment(dto: CreateTeacherAssignmentDto): Promise<TeacherAssignment> {
-    const teacher = await this.userRepo.findOne({ where: { id: dto.teacherId } });
-    if (!teacher) throw new NotFoundException('Преподаватель не найден');
-    if (teacher.role !== Role.TEACHER) {
-      throw new BadRequestException('Пользователь не является преподавателем');
-    }
-
-    const group = await this.groupRepo.findOne({ where: { id: dto.groupId } });
-    if (!group) throw new NotFoundException('Группа не найдена');
-
-    const discipline = await this.disciplineRepo.findOne({ where: { id: dto.disciplineId } });
-    if (!discipline) throw new NotFoundException('Дисциплина не найдена');
-
-    const existing = await this.teacherAssignmentRepo.findOne({
-      where: {
-        teacherId: dto.teacherId,
-        groupId: dto.groupId,
-        disciplineId: dto.disciplineId,
-        semester: dto.semester,
-        academicYear: dto.academicYear,
-      },
-    });
-    if (existing) throw new ConflictException('Такое назначение уже существует');
-
-    const assignment = this.teacherAssignmentRepo.create({
-      teacherId: dto.teacherId,
-      groupId: dto.groupId,
-      disciplineId: dto.disciplineId,
-      semester: dto.semester,
-      academicYear: dto.academicYear,
-    });
-    return this.teacherAssignmentRepo.save(assignment);
-  }
-
-  async getTeacherAssignments(teacherId?: string, groupId?: string): Promise<TeacherAssignment[]> {
-    const where: Record<string, string> = {};
-    if (teacherId) where.teacherId = teacherId;
-    if (groupId) where.groupId = groupId;
-    return this.teacherAssignmentRepo.find({
-      where,
-      relations: { teacher: true, group: true, discipline: true },
-      order: { academicYear: 'DESC', semester: 'ASC' },
-    });
-  }
-
-  async deleteTeacherAssignment(id: string): Promise<{ message: string }> {
-    const record = await this.teacherAssignmentRepo.findOne({ where: { id } });
-    if (!record) throw new NotFoundException('Назначение не найдено');
-    await this.teacherAssignmentRepo.remove(record);
-    return { message: 'Назначение удалено' };
   }
 
   async getDisciplines() {

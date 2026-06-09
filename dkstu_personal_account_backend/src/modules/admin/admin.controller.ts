@@ -29,7 +29,6 @@ import { AssignScholarshipDto } from './dto/assign-scholarship.dto';
 import { UpdateScholarshipDto } from './dto/update-scholarship.dto';
 import { SetGroupRoleDto } from './dto/set-group-role.dto';
 import { AssignGroupDisciplinesDto } from './dto/assign-group-disciplines.dto';
-import { CreateTeacherAssignmentDto } from './dto/create-teacher-assignment.dto';
 
 @Controller('admin')
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -168,26 +167,6 @@ export class AdminController {
   @Delete('group-disciplines/:id')
   removeGroupSemesterDiscipline(@Param('id', ParseUUIDPipe) id: string) {
     return this.adminService.removeGroupSemesterDiscipline(id);
-  }
-
-  // ─── Teacher assignments ──────────────────────────────────────────────────
-
-  @Post('teacher-assignments')
-  createTeacherAssignment(@Body() dto: CreateTeacherAssignmentDto) {
-    return this.adminService.createTeacherAssignment(dto);
-  }
-
-  @Get('teacher-assignments')
-  getTeacherAssignments(
-    @Query('teacherId') teacherId?: string,
-    @Query('groupId') groupId?: string,
-  ) {
-    return this.adminService.getTeacherAssignments(teacherId, groupId);
-  }
-
-  @Delete('teacher-assignments/:id')
-  deleteTeacherAssignment(@Param('id', ParseUUIDPipe) id: string) {
-    return this.adminService.deleteTeacherAssignment(id);
   }
 
   @Get('disciplines')
