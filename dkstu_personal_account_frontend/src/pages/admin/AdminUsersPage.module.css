@@ -371,7 +371,7 @@
 
 /* Import result */
 .importSuccess {
-  padding: 10px 14px;
+  padding: 12px 14px;
   border-radius: 6px;
   background: rgba(22, 163, 74, 0.08);
   border: 1px solid rgba(22, 163, 74, 0.25);
@@ -381,6 +381,9 @@
 }
 
 .importError {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
   padding: 10px 14px;
   border-radius: 6px;
   background: rgba(220, 38, 38, 0.06);
@@ -388,4 +391,187 @@
   color: #dc2626;
   font-size: 14px;
   margin-bottom: 16px;
+}
+
+.importSummary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.importClose {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 14px;
+  color: inherit;
+  opacity: 0.6;
+  padding: 0 4px;
+  line-height: 1;
+}
+
+.importClose:hover {
+  opacity: 1;
+}
+
+.importErrors {
+  margin: 8px 0 0;
+  padding-left: 18px;
+  font-size: 13px;
+  opacity: 0.85;
+}
+
+.importErrors li {
+  margin-bottom: 2px;
+}
+
+/* Generated passwords block */
+.passwordsBlock {
+  margin-top: 14px;
+  border-top: 1px solid rgba(22, 163, 74, 0.25);
+  padding-top: 12px;
+}
+
+.passwordsHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+  font-weight: 600;
+  font-size: 13px;
+}
+
+.btnDownload {
+  padding: 5px 12px;
+  border: 1px solid #15803d;
+  border-radius: 5px;
+  background: transparent;
+  color: #15803d;
+  font-size: 13px;
+  cursor: pointer;
+  font-weight: 500;
+  transition: background 0.15s;
+}
+
+.btnDownload:hover {
+  background: rgba(22, 163, 74, 0.12);
+}
+
+.passwordsTable {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.passwordsTable th,
+.passwordsTable td {
+  text-align: left;
+  padding: 6px 10px;
+  border-bottom: 1px solid rgba(22, 163, 74, 0.15);
+}
+
+.passwordsTable th {
+  font-weight: 600;
+  opacity: 0.75;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}
+
+.passwordCell {
+  font-family: 'Courier New', monospace;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+}
+
+/* Password modal */
+.modalOverlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.modal {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 28px;
+  width: 420px;
+  max-width: calc(100vw - 32px);
+  box-shadow: 0 8px 32px rgba(0,0,0,0.12);
+}
+
+.modalTitle {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--text-h);
+  margin: 0 0 8px;
+}
+
+.modalHint {
+  font-size: 13px;
+  color: #b45309;
+  background: rgba(234, 179, 8, 0.08);
+  border: 1px solid rgba(234, 179, 8, 0.2);
+  border-radius: 6px;
+  padding: 8px 12px;
+  margin-bottom: 20px;
+}
+
+.modalRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+}
+
+.modalLabel {
+  font-size: 13px;
+  color: var(--text);
+  opacity: 0.7;
+  width: 56px;
+  flex-shrink: 0;
+}
+
+.modalValue {
+  font-size: 14px;
+  color: var(--text-h);
+}
+
+.modalPassword {
+  font-family: 'Courier New', monospace;
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--accent);
+  letter-spacing: 1px;
+  flex: 1;
+}
+
+.btnCopy {
+  padding: 5px 12px;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  background: transparent;
+  color: var(--text);
+  font-size: 12px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: border-color 0.15s, color 0.15s;
+}
+
+.btnCopy:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.modalActions {
+  margin-top: 20px;
+  display: flex;
+  justify-content: flex-end;
 }

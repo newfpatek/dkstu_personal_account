@@ -54,11 +54,12 @@ export class AdminService {
 
   // ─── Users ───────────────────────────────────────────────────────────────
 
-  async createUser(dto: CreateUserDto): Promise<Omit<User, 'password'>> {
+  async createUser(dto: CreateUserDto): Promise<Omit<User, 'password'> & { generatedPassword?: string }> {
     const exists = await this.userRepo.findOne({ where: { email: dto.email } });
     if (exists) throw new ConflictException('Email уже используется');
 
-    const hashed = await bcrypt.hash(dto.password, 10);
+    const plainPassword = dto.password ?? this.generatePassword();
+    const hashed = await bcrypt.hash(plainPassword, 10);
     const user = this.userRepo.create({
       fullName: dto.name,
       email: dto.email,
@@ -67,7 +68,9 @@ export class AdminService {
       isPaid: dto.isPaid ?? false,
     });
     await this.userRepo.save(user);
-    return this.sanitize(user);
+    const result: Omit<User, 'password'> & { generatedPassword?: string } = this.sanitize(user);
+    if (!dto.password) result.generatedPassword = plainPassword;
+    return result;
   }
 
   async findAllUsers(role?: Role): Promise<Omit<User, 'password'>[]> {
@@ -614,7 +617,7 @@ export class AdminService {
     buffer: Buffer,
     mimetype: string,
     originalname: string,
-  ): Promise<{ group: { id: string; name: string }; created: number; added: number; skipped: number; errors: string[] }> {
+  ): Promise<{ group: { id: string; name: string }; created: number; added: number; skipped: number; errors: string[]; generatedPasswords: Array<{ email: string; password: string }> }> {
     let groupData: {
       name: string;
       year: number;
@@ -652,6 +655,7 @@ export class AdminService {
     let skipped = 0;
     const errors: string[] = [];
     const members: User[] = [];
+    const generatedPasswords: Array<{ email: string; password: string }> = [];
 
     for (const rec of groupData.members ?? []) {
       if (!rec.email) {
@@ -662,13 +666,14 @@ export class AdminService {
 
       let user = await this.userRepo.findOne({ where: { email: rec.email } });
       if (!user) {
-        if (!rec.name || !rec.password) {
-          errors.push(`${rec.email}: пользователь не найден, нужны name и password для создания`);
+        if (!rec.name) {
+          errors.push(`${rec.email}: пользователь не найден, нужно поле name для создания`);
           skipped++;
           continue;
         }
+        const plainPassword = rec.password ?? this.generatePassword();
         const role = Object.values(Role).includes(rec.role as Role) ? (rec.role as Role) : Role.STUDENT;
-        const hashed = await bcrypt.hash(rec.password, 10);
+        const hashed = await bcrypt.hash(plainPassword, 10);
         user = await this.userRepo.save(
           this.userRepo.create({
             fullName: rec.name,
@@ -678,6 +683,7 @@ export class AdminService {
             isPaid: rec.isPaid ?? false,
           }),
         );
+        if (!rec.password) generatedPasswords.push({ email: rec.email, password: plainPassword });
         created++;
       }
 
@@ -690,15 +696,15 @@ export class AdminService {
       await this.groupRepo.save(group);
     }
 
-    return { group: { id: group.id, name: group.name }, created, added, skipped, errors };
+    return { group: { id: group.id, name: group.name }, created, added, skipped, errors, generatedPasswords };
   }
 
   async importUsers(
     buffer: Buffer,
     mimetype: string,
     originalname: string,
-  ): Promise<{ created: number; skipped: number; errors: string[] }> {
-    let records: Array<{ name: string; email: string; password: string; role?: string; isPaid?: boolean }>;
+  ): Promise<{ created: number; skipped: number; errors: string[]; generatedPasswords: Array<{ email: string; password: string }> }> {
+    let records: Array<{ name: string; email: string; password?: string; role?: string; isPaid?: boolean }>;
 
     try {
       if (mimetype === 'application/json' || originalname.endsWith('.json')) {
@@ -721,10 +727,11 @@ export class AdminService {
     let created = 0;
     let skipped = 0;
     const errors: string[] = [];
+    const generatedPasswords: Array<{ email: string; password: string }> = [];
 
     for (const rec of records) {
-      if (!rec.name || !rec.email || !rec.password) {
-        errors.push(`Пропущена запись: обязательные поля name/email/password отсутствуют`);
+      if (!rec.name || !rec.email) {
+        errors.push(`Пропущена запись: обязательные поля name/email отсутствуют`);
         skipped++;
         continue;
       }
@@ -734,8 +741,9 @@ export class AdminService {
         skipped++;
         continue;
       }
+      const plainPassword = rec.password ?? this.generatePassword();
       const role = Object.values(Role).includes(rec.role as Role) ? (rec.role as Role) : Role.STUDENT;
-      const hashed = await bcrypt.hash(rec.password, 10);
+      const hashed = await bcrypt.hash(plainPassword, 10);
       const user = this.userRepo.create({
         fullName: rec.name,
         email: rec.email,
@@ -744,10 +752,11 @@ export class AdminService {
         isPaid: rec.isPaid ?? false,
       });
       await this.userRepo.save(user);
+      if (!rec.password) generatedPasswords.push({ email: rec.email, password: plainPassword });
       created++;
     }
 
-    return { created, skipped, errors };
+    return { created, skipped, errors, generatedPasswords };
   }
 
   // ─── Helpers ─────────────────────────────────────────────────────────────
@@ -775,6 +784,18 @@ export class AdminService {
   private async requireUser(id: string): Promise<void> {
     const user = await this.userRepo.findOne({ where: { id } });
     if (!user) throw new NotFoundException('Пользователь не найден');
+  }
+
+  private generatePassword(): string {
+    const upper = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
+    const lower = 'abcdefghjkmnpqrstuvwxyz';
+    const digits = '23456789';
+    const special = '#@$%&';
+    const all = upper + lower + digits + special;
+    const rand = (s: string) => s[Math.floor(Math.random() * s.length)];
+    const base = rand(upper) + rand(lower) + rand(digits) + rand(special);
+    const rest = Array.from({ length: 6 }, () => rand(all)).join('');
+    return (base + rest).split('').sort(() => Math.random() - 0.5).join('');
   }
 
   private sanitize(user: User): Omit<User, 'password'> {

@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import * as XLSX from 'xlsx';
 import {
   getUsers,
   createUser,
@@ -39,6 +40,47 @@ const EMPTY_FORM = {
   isPaid: false,
 };
 
+function downloadExcel(rows, filename) {
+  const ws = XLSX.utils.json_to_sheet(rows);
+  ws['!cols'] = [{ wch: 36 }, { wch: 18 }];
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Пароли');
+  XLSX.writeFile(wb, filename);
+}
+
+function PasswordModal({ email, password, onClose }) {
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = () => {
+    navigator.clipboard.writeText(password);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  return (
+    <div className={styles.modalOverlay} onClick={onClose}>
+      <div className={styles.modal} onClick={(e) => e.stopPropagation()}>
+        <h3 className={styles.modalTitle}>Пользователь создан</h3>
+        <p className={styles.modalHint}>Запишите пароль — он больше не будет показан.</p>
+        <div className={styles.modalRow}>
+          <span className={styles.modalLabel}>Email:</span>
+          <span className={styles.modalValue}>{email}</span>
+        </div>
+        <div className={styles.modalRow}>
+          <span className={styles.modalLabel}>Пароль:</span>
+          <span className={styles.modalPassword}>{password}</span>
+          <button className={styles.btnCopy} onClick={handleCopy}>
+            {copied ? '✓ Скопировано' : 'Скопировать'}
+          </button>
+        </div>
+        <div className={styles.modalActions}>
+          <button className={styles.btnPrimary} onClick={onClose}>Закрыть</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function UserForm({ initial, onSave, onCancel, loading, error }) {
   const [form, setForm] = useState(initial || EMPTY_FORM);
 
@@ -75,19 +117,18 @@ function UserForm({ initial, onSave, onCancel, loading, error }) {
           placeholder="example@mail.ru"
         />
       </div>
-      <div className={styles.formRow}>
-        <label className={styles.label}>
-          {initial ? 'Новый пароль (оставьте пустым, чтобы не менять)' : 'Пароль'}
-        </label>
-        <input
-          className={styles.input}
-          type="password"
-          value={form.password}
-          onChange={(e) => set('password', e.target.value)}
-          required={!initial}
-          placeholder={initial ? 'Не менять' : ''}
-        />
-      </div>
+      {initial && (
+        <div className={styles.formRow}>
+          <label className={styles.label}>Новый пароль (оставьте пустым, чтобы не менять)</label>
+          <input
+            className={styles.input}
+            type="password"
+            value={form.password}
+            onChange={(e) => set('password', e.target.value)}
+            placeholder="Не менять"
+          />
+        </div>
+      )}
       {!initial && (
         <div className={styles.formRow}>
           <label className={styles.label}>Роль</label>
@@ -128,7 +169,7 @@ function UserForm({ initial, onSave, onCancel, loading, error }) {
   );
 }
 
-function UserDetail({ user, onEdit, onDelete, onRefresh }) {
+function UserDetail({ user, onEdit, onDelete }) {
   const initials = user.fullName
     ? user.fullName.split(' ').slice(0, 2).map((p) => p[0]).join('')
     : '?';
@@ -182,6 +223,72 @@ function UserDetail({ user, onEdit, onDelete, onRefresh }) {
   );
 }
 
+function ImportResult({ result, onClose }) {
+  if (result.error) {
+    return (
+      <div className={styles.importError}>
+        {result.error}
+        <button className={styles.importClose} onClick={onClose}>✕</button>
+      </div>
+    );
+  }
+
+  const hasPasswords = result.generatedPasswords?.length > 0;
+
+  const handleDownload = () => {
+    const rows = result.generatedPasswords.map((r) => ({
+      Email: r.email,
+      Пароль: r.password,
+    }));
+    downloadExcel(rows, 'passwords.xlsx');
+  };
+
+  return (
+    <div className={styles.importSuccess}>
+      <div className={styles.importSummary}>
+        <span>
+          Создано: <b>{result.created}</b> · Пропущено: <b>{result.skipped}</b>
+          {result.errors?.length > 0 && <> · Ошибок: <b>{result.errors.length}</b></>}
+        </span>
+        <button className={styles.importClose} onClick={onClose}>✕</button>
+      </div>
+
+      {result.errors?.length > 0 && (
+        <ul className={styles.importErrors}>
+          {result.errors.map((e, i) => <li key={i}>{e}</li>)}
+        </ul>
+      )}
+
+      {hasPasswords && (
+        <div className={styles.passwordsBlock}>
+          <div className={styles.passwordsHeader}>
+            <span>Сгенерированные пароли</span>
+            <button className={styles.btnDownload} onClick={handleDownload}>
+              Скачать Excel
+            </button>
+          </div>
+          <table className={styles.passwordsTable}>
+            <thead>
+              <tr>
+                <th>Email</th>
+                <th>Пароль</th>
+              </tr>
+            </thead>
+            <tbody>
+              {result.generatedPasswords.map((r) => (
+                <tr key={r.email}>
+                  <td>{r.email}</td>
+                  <td className={styles.passwordCell}>{r.password}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function AdminUsersPage() {
   const [roleFilter, setRoleFilter] = useState('');
   const [query, setQuery] = useState('');
@@ -189,13 +296,13 @@ export default function AdminUsersPage() {
   const [loading, setLoading] = useState(false);
   const [selectedId, setSelectedId] = useState(null);
   const [selectedUser, setSelectedUser] = useState(null);
-  const [mode, setMode] = useState(null); // null | 'create' | 'edit'
+  const [mode, setMode] = useState(null);
   const [formLoading, setFormLoading] = useState(false);
   const [formError, setFormError] = useState('');
   const [importLoading, setImportLoading] = useState(false);
   const [importResult, setImportResult] = useState(null);
+  const [passwordModal, setPasswordModal] = useState(null); // { email, password }
   const fileInputRef = useRef(null);
-  const debounceRef = useRef(null);
 
   const loadUsers = (role) => {
     setLoading(true);
@@ -231,9 +338,12 @@ export default function AdminUsersPage() {
     setFormLoading(true);
     setFormError('');
     try {
-      await createUser(payload);
+      const res = await createUser(payload);
       loadUsers(roleFilter);
       setMode(null);
+      if (res.data.generatedPassword) {
+        setPasswordModal({ email: res.data.email, password: res.data.generatedPassword });
+      }
     } catch (e) {
       setFormError(e.response?.data?.message || 'Ошибка при создании пользователя');
     } finally {
@@ -290,6 +400,14 @@ export default function AdminUsersPage() {
 
   return (
     <div>
+      {passwordModal && (
+        <PasswordModal
+          email={passwordModal.email}
+          password={passwordModal.password}
+          onClose={() => setPasswordModal(null)}
+        />
+      )}
+
       <div className={styles.pageHeader}>
         <h1 className={s.pageTitle} style={{ margin: 0 }}>
           Пользователи
@@ -319,14 +437,9 @@ export default function AdminUsersPage() {
       </div>
 
       {importResult && (
-        <div className={importResult.error ? styles.importError : styles.importSuccess}>
-          {importResult.error
-            ? importResult.error
-            : `Создано: ${importResult.created} · Пропущено: ${importResult.skipped}${importResult.errors?.length ? ` · Ошибок: ${importResult.errors.length}` : ''}`}
-        </div>
+        <ImportResult result={importResult} onClose={() => setImportResult(null)} />
       )}
 
-      {/* Role filter tabs */}
       <div className={styles.roleTabs}>
         {ROLES.map((r) => (
           <button
@@ -340,7 +453,6 @@ export default function AdminUsersPage() {
       </div>
 
       <div className={styles.splitLayout}>
-        {/* Left panel */}
         <div className={styles.leftPanel}>
           <div className={styles.searchWrap}>
             <input
@@ -379,7 +491,6 @@ export default function AdminUsersPage() {
           </div>
         </div>
 
-        {/* Right panel */}
         <div className={styles.rightPanel}>
           {mode === 'create' && (
             <div className={styles.panelBox}>
