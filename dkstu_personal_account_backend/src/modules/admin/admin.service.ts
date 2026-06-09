@@ -276,9 +276,10 @@ export class AdminService {
     return this.scholarshipRepo.save(record);
   }
 
-  async updateScholarship(id: string, dto: UpdateScholarshipDto): Promise<Scholarship> {
+  async updateScholarship(studentId: string, id: string, dto: UpdateScholarshipDto): Promise<Scholarship> {
     const record = await this.scholarshipRepo.findOne({ where: { id } });
     if (!record) throw new NotFoundException('Запись о стипендии не найдена');
+    if (record.studentId !== studentId) throw new NotFoundException('Запись о стипендии не найдена');
 
     if (dto.amount !== undefined) record.amount = dto.amount;
     if (dto.direction !== undefined) record.direction = dto.direction;
@@ -289,9 +290,10 @@ export class AdminService {
     return this.scholarshipRepo.save(record);
   }
 
-  async deleteScholarship(id: string): Promise<{ message: string }> {
+  async deleteScholarship(studentId: string, id: string): Promise<{ message: string }> {
     const record = await this.scholarshipRepo.findOne({ where: { id } });
     if (!record) throw new NotFoundException('Запись о стипендии не найдена');
+    if (record.studentId !== studentId) throw new NotFoundException('Запись о стипендии не найдена');
     await this.scholarshipRepo.remove(record);
     return { message: 'Запись о стипендии удалена' };
   }

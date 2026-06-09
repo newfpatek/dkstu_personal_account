@@ -7,10 +7,12 @@ import {
   Body,
   Param,
   Query,
+  Request,
   UseGuards,
   UseInterceptors,
   UploadedFile,
   ParseUUIDPipe,
+  BadRequestException,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { memoryStorage } from 'multer';
@@ -65,7 +67,10 @@ export class AdminController {
   }
 
   @Delete('users/:id')
-  deleteUser(@Param('id', ParseUUIDPipe) id: string) {
+  deleteUser(@Param('id', ParseUUIDPipe) id: string, @Request() req: any) {
+    if (id === req.user.id) {
+      throw new BadRequestException('Нельзя удалить собственную учётную запись');
+    }
     return this.adminService.deleteUser(id);
   }
 
@@ -226,14 +231,18 @@ export class AdminController {
 
   @Patch('students/:studentId/scholarships/:id')
   updateScholarship(
+    @Param('studentId', ParseUUIDPipe) studentId: string,
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: UpdateScholarshipDto,
   ) {
-    return this.adminService.updateScholarship(id, dto);
+    return this.adminService.updateScholarship(studentId, id, dto);
   }
 
   @Delete('students/:studentId/scholarships/:id')
-  deleteScholarship(@Param('id', ParseUUIDPipe) id: string) {
-    return this.adminService.deleteScholarship(id);
+  deleteScholarship(
+    @Param('studentId', ParseUUIDPipe) studentId: string,
+    @Param('id', ParseUUIDPipe) id: string,
+  ) {
+    return this.adminService.deleteScholarship(studentId, id);
   }
 }

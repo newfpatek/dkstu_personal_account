@@ -1,26 +1,31 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { PassportStrategy } from '@nestjs/passport';
 import { ExtractJwt, Strategy } from 'passport-jwt';
 import { ConfigService } from '@nestjs/config';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
+import { User } from '../modules/users/entities/user.entity';
 
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy) {
-  constructor(configService: ConfigService) {
+  constructor(
+    configService: ConfigService,
+    @InjectRepository(User)
+    private readonly userRepository: Repository<User>,
+  ) {
     super({
-      // Берём токен из заголовка: Authorization: Bearer <token>
       jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
       ignoreExpiration: false,
       secretOrKey: configService.get<string>('JWT_SECRET')!,
     });
   }
 
-  // Этот метод вызывается автоматически после проверки подписи токена
-  // Всё что вернёшь — попадёт в request.user
-  async validate(payload: { sub: number; email: string; role: string }) {
-    return {
-      id: payload.sub,
-      email: payload.email,
-      role: payload.role,
-    };
+  async validate(payload: { sub: string; email: string; role: string }) {
+    const user = await this.userRepository.findOne({
+      where: { id: payload.sub },
+      select: { id: true, email: true, role: true },
+    });
+    if (!user) throw new UnauthorizedException('Пользователь не найден');
+    return { id: user.id, email: user.email, role: user.role };
   }
 }

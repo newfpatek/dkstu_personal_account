@@ -11,6 +11,7 @@ import {
   UseGuards,
   UseInterceptors,
   UploadedFile,
+  BadRequestException,
 } from '@nestjs/common';
 import type { Response } from 'express';
 import { FileInterceptor } from '@nestjs/platform-express';
@@ -157,10 +158,40 @@ export class StudentsController {
         },
         filename: (_req, file, cb) => {
           const unique = `${Date.now()}-${Math.round(Math.random() * 1e9)}`;
-          cb(null, `${unique}${path.extname(file.originalname)}`);
+          cb(null, `${unique}${path.extname(file.originalname).toLowerCase()}`);
         },
       }),
-      limits: { fileSize: 25 * 1024 * 1024 }, // 25 MB
+      limits: { fileSize: 25 * 1024 * 1024 },
+      fileFilter: (_req, file, cb) => {
+        const allowedMimes = new Set([
+          'application/pdf',
+          'application/msword',
+          'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+          'application/vnd.oasis.opendocument.text',
+          'application/vnd.ms-excel',
+          'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+          'application/vnd.oasis.opendocument.spreadsheet',
+          'image/jpeg',
+          'image/png',
+          'image/gif',
+          'image/webp',
+          'application/zip',
+          'application/x-rar-compressed',
+          'application/vnd.rar',
+        ]);
+        const allowedExts = new Set([
+          '.pdf', '.doc', '.docx', '.odt',
+          '.xls', '.xlsx', '.ods',
+          '.jpg', '.jpeg', '.png', '.gif', '.webp',
+          '.zip', '.rar',
+        ]);
+        const ext = path.extname(file.originalname).toLowerCase();
+        if (allowedMimes.has(file.mimetype) && allowedExts.has(ext)) {
+          cb(null, true);
+        } else {
+          cb(new BadRequestException('Недопустимый тип файла. Разрешены: PDF, DOC/DOCX, ODT, XLS/XLSX, ODS, изображения (JPG/PNG/GIF/WEBP), ZIP, RAR'), false);
+        }
+      },
     }),
   )
   addPortfolioItem(

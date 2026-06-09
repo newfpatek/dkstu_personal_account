@@ -1,12 +1,10 @@
-import { Injectable, UnauthorizedException, ConflictException } from '@nestjs/common';
+import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
 import { User } from '../modules/users/entities/user.entity';
-import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
-import { Role } from './enums/role.enum';
 
 @Injectable()
 export class AuthService {
@@ -15,33 +13,6 @@ export class AuthService {
     private userRepository: Repository<User>,
     private jwtService: JwtService,
   ) {}
-
-  // --- РЕГИСТРАЦИЯ ---
-  async register(dto: RegisterDto) {
-    // Проверяем, не занят ли email
-    const existing = await this.userRepository.findOne({
-      where: { email: dto.email },
-    });
-
-    if (existing) {
-      throw new ConflictException('Пользователь с таким email уже существует');
-    }
-
-    // Хэшируем пароль
-    const hashedPassword = await bcrypt.hash(dto.password, 10);
-
-    // Создаём пользователя в БД
-    const user = this.userRepository.create({
-      email: dto.email,
-      password: hashedPassword,
-      fullName: dto.fullName,
-      role: Role.STUDENT,
-    });
-
-    await this.userRepository.save(user);
-
-    return { message: 'Регистрация прошла успешно' };
-  }
 
   // --- ЛОГИН ---
   async login(dto: LoginDto) {
