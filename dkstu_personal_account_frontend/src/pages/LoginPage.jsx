@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { loginRequest } from '../api/auth';
+import { getErrorMessage } from '../utils/error';
 
 export default function LoginPage() {
   const navigate = useNavigate();
@@ -27,7 +28,7 @@ export default function LoginPage() {
       else navigate('/student');
 
     } catch (err) {
-      setError(err.response?.data?.message || 'Ошибка входа');
+      setError(getErrorMessage(err, 'Неверный email или пароль'));
     }
   };
 

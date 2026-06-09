@@ -15,6 +15,8 @@ import {
   removeGroupSemesterDiscipline,
   importGroupDisciplines,
 } from '../../api/admin';
+import { useToast } from '../../contexts/ToastContext';
+import { getErrorMessage } from '../../utils/error';
 import s from '../student/shared.module.css';
 import styles from './AdminGroupsPage.module.css';
 
@@ -79,6 +81,7 @@ function CreateGroupForm({ onSave, onCancel, loading, error }) {
 }
 
 function AddMemberPanel({ groupId, existingIds, onAdded }) {
+  const { showToast } = useToast();
   const [query, setQuery] = useState('');
   const [results, setResults] = useState([]);
   const [loadingId, setLoadingId] = useState(null);
@@ -112,7 +115,7 @@ function AddMemberPanel({ groupId, existingIds, onAdded }) {
       setResults([]);
       onAdded();
     } catch (e) {
-      alert(e.response?.data?.message || 'Ошибка при добавлении');
+      showToast(getErrorMessage(e, 'Ошибка при добавлении участника'));
     } finally {
       setLoadingId(null);
     }
@@ -167,6 +170,7 @@ const GROUP_ROLES = [
 ];
 
 function SetRoleModal({ member, groupId, onSave, onClose }) {
+  const { showToast } = useToast();
   const [label, setLabel] = useState(member.groupRole || '');
   const [loading, setLoading] = useState(false);
 
@@ -180,7 +184,7 @@ function SetRoleModal({ member, groupId, onSave, onClose }) {
       }
       onSave();
     } catch (e) {
-      alert(e.response?.data?.message || 'Ошибка');
+      showToast(getErrorMessage(e, 'Ошибка при сохранении роли'));
     } finally {
       setLoading(false);
     }
@@ -216,6 +220,7 @@ function SetRoleModal({ member, groupId, onSave, onClose }) {
 }
 
 function GroupDisciplinesPanel({ groupId }) {
+  const { showToast } = useToast();
   const [allDisciplines, setAllDisciplines] = useState([]);
   const [planEntries, setPlanEntries] = useState([]);
   const [semester, setSemester] = useState('');
@@ -233,11 +238,13 @@ function GroupDisciplinesPanel({ groupId }) {
     try {
       const res = await getGroupSemesterDisciplines(groupId);
       setPlanEntries(res.data);
-    } catch { /* ignore */ }
+    } catch (err) {
+      showToast(getErrorMessage(err, 'Не удалось загрузить план дисциплин'));
+    }
   };
 
   useEffect(() => {
-    getDisciplines().then((r) => setAllDisciplines(r.data)).catch(() => {});
+    getDisciplines().then((r) => setAllDisciplines(r.data)).catch((err) => showToast(getErrorMessage(err, 'Не удалось загрузить дисциплины')));
     loadPlan();
   }, [groupId]);
 
@@ -284,7 +291,7 @@ function GroupDisciplinesPanel({ groupId }) {
       setSelected([]);
       await loadPlan();
     } catch (e) {
-      alert(e.response?.data?.message || 'Ошибка');
+      showToast(getErrorMessage(e, 'Ошибка при добавлении дисциплин'));
     } finally {
       setSaving(false);
     }
@@ -296,7 +303,7 @@ function GroupDisciplinesPanel({ groupId }) {
       await removeGroupSemesterDiscipline(id);
       await loadPlan();
     } catch (e) {
-      alert(e.response?.data?.message || 'Ошибка');
+      showToast(getErrorMessage(e, 'Ошибка при удалении дисциплины'));
     } finally {
       setRemovingId(null);
     }
@@ -484,6 +491,7 @@ function GroupDisciplinesPanel({ groupId }) {
 }
 
 function GroupDetail({ group, onDeleted, onRefresh }) {
+  const { showToast } = useToast();
   const [addOpen, setAddOpen] = useState(false);
   const [removingId, setRemovingId] = useState(null);
   const [roleModal, setRoleModal] = useState(null);
@@ -497,7 +505,7 @@ function GroupDetail({ group, onDeleted, onRefresh }) {
       await removeUserFromGroup(group.id, member.id);
       onRefresh();
     } catch (e) {
-      alert(e.response?.data?.message || 'Ошибка');
+      showToast(getErrorMessage(e, 'Ошибка при удалении участника'));
     } finally {
       setRemovingId(null);
     }
@@ -509,7 +517,7 @@ function GroupDetail({ group, onDeleted, onRefresh }) {
       await deleteGroup(group.id);
       onDeleted();
     } catch (e) {
-      alert(e.response?.data?.message || 'Ошибка при удалении');
+      showToast(getErrorMessage(e, 'Ошибка при удалении группы'));
     }
   };
 
@@ -664,6 +672,7 @@ function GroupDetail({ group, onDeleted, onRefresh }) {
 }
 
 export default function AdminGroupsPage() {
+  const { showToast } = useToast();
   const [groups, setGroups] = useState([]);
   const [loading, setLoading] = useState(false);
   const [selectedGroup, setSelectedGroup] = useState(null);
@@ -684,7 +693,8 @@ export default function AdminGroupsPage() {
         const updated = res.data.find((g) => g.id === selectedGroup.id);
         setSelectedGroup(updated || null);
       }
-    } catch {
+    } catch (err) {
+      showToast(getErrorMessage(err, 'Не удалось загрузить группы'));
     } finally {
       setLoading(false);
     }
@@ -702,7 +712,9 @@ export default function AdminGroupsPage() {
       await loadGroups(false);
       setShowCreate(false);
     } catch (e) {
-      setCreateError(e.response?.data?.message || 'Ошибка при создании');
+      const msg = getErrorMessage(e, 'Ошибка при создании группы');
+      setCreateError(msg);
+      showToast(msg);
     } finally {
       setCreateLoading(false);
     }

@@ -1,22 +1,28 @@
 import { useState, useEffect } from 'react';
 import { getMyGroup } from '../../api/students';
+import { useToast } from '../../contexts/ToastContext';
+import { getErrorMessage } from '../../utils/error';
 import s from './shared.module.css';
 import styles from './GroupPage.module.css';
 
 export default function GroupPage() {
+  const { showToast } = useToast();
   const [groups, setGroups] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
+  const [loadError, setLoadError] = useState(false);
 
   useEffect(() => {
     getMyGroup()
       .then((r) => setGroups(r.data))
-      .catch(() => setError('Не удалось загрузить данные группы'))
+      .catch((err) => {
+        showToast(getErrorMessage(err, 'Не удалось загрузить данные группы'));
+        setLoadError(true);
+      })
       .finally(() => setLoading(false));
   }, []);
 
   if (loading) return <p className={s.empty}>Загрузка...</p>;
-  if (error) return <p className={s.errorMsg}>{error}</p>;
+  if (loadError) return <p className={s.errorMsg}>Не удалось загрузить данные. Попробуйте обновить страницу.</p>;
 
   if (groups.length === 0) {
     return (

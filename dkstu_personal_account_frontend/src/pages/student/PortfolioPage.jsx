@@ -1,6 +1,8 @@
 import { useState, useEffect, useRef } from 'react';
 import { getPortfolio, uploadPortfolioItem, deletePortfolioItem, downloadPortfolio, fetchPortfolioFile } from '../../api/students';
 import { formatDateShort as formatDate } from '../../utils/date';
+import { useToast } from '../../contexts/ToastContext';
+import { getErrorMessage } from '../../utils/error';
 import s from './shared.module.css';
 import styles from './PortfolioPage.module.css';
 
@@ -46,13 +48,13 @@ function openBlob(data, contentType, fileName, inline) {
 }
 
 export default function PortfolioPage() {
+  const { showToast } = useToast();
   const [items, setItems] = useState([]);
   const [category, setCategory] = useState('');
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
+  const [loadError, setLoadError] = useState(false);
   const [showForm, setShowForm] = useState(false);
   const [uploading, setUploading] = useState(false);
-  const [uploadError, setUploadError] = useState('');
   const [deletingId, setDeletingId] = useState(null);
   const [fileLoadingId, setFileLoadingId] = useState(null);
   const [search, setSearch] = useState('');
@@ -63,14 +65,16 @@ export default function PortfolioPage() {
   const [showDownload, setShowDownload] = useState(false);
   const [dlForm, setDlForm] = useState({ category: '', dateFrom: '', dateTo: '' });
   const [downloading, setDownloading] = useState(false);
-  const [dlError, setDlError] = useState('');
 
   const load = (cat) => {
     setLoading(true);
-    setError('');
+    setLoadError(false);
     getPortfolio(cat || undefined)
       .then((res) => setItems(res.data))
-      .catch(() => setError('Не удалось загрузить портфолио'))
+      .catch((err) => {
+        showToast(getErrorMessage(err, 'Не удалось загрузить портфолио'));
+        setLoadError(true);
+      })
       .finally(() => setLoading(false));
   };
 
@@ -100,7 +104,7 @@ export default function PortfolioPage() {
       setShowForm(false);
       load(category);
     } catch (err) {
-      setUploadError(err.response?.data?.message || 'Ошибка при загрузке');
+      showToast(getErrorMessage(err, 'Ошибка при загрузке файла'));
     } finally {
       setUploading(false);
     }
@@ -112,8 +116,8 @@ export default function PortfolioPage() {
     try {
       await deletePortfolioItem(id);
       setItems((prev) => prev.filter((i) => i.id !== id));
-    } catch {
-      alert('Не удалось удалить');
+    } catch (err) {
+      showToast(getErrorMessage(err, 'Не удалось удалить запись'));
     } finally {
       setDeletingId(null);
     }
@@ -140,11 +144,10 @@ export default function PortfolioPage() {
       URL.revokeObjectURL(url);
       setShowDownload(false);
     } catch (err) {
-      if (err.response?.status === 404) {
-        setDlError('Нет файлов по указанным фильтрам');
-      } else {
-        setDlError('Ошибка при скачивании архива');
-      }
+      const msg = err.response?.status === 404
+        ? 'Нет файлов по указанным фильтрам'
+        : getErrorMessage(err, 'Ошибка при скачивании архива');
+      showToast(msg);
     } finally {
       setDownloading(false);
     }
@@ -156,8 +159,8 @@ export default function PortfolioPage() {
       const res = await fetchPortfolioFile(item.id, inline);
       const contentType = res.headers['content-type'];
       openBlob(res.data, contentType, item.fileName, inline);
-    } catch {
-      alert('Не удалось загрузить файл');
+    } catch (err) {
+      showToast(getErrorMessage(err, 'Не удалось открыть файл'));
     } finally {
       setFileLoadingId(null);
     }
@@ -214,7 +217,6 @@ export default function PortfolioPage() {
               />
             </div>
           </div>
-          {dlError && <p className={s.errorMsg}>{dlError}</p>}
           <button className={styles.submitBtn} type="submit" disabled={downloading}>
             {downloading ? 'Формируем архив...' : 'Скачать ZIP'}
           </button>
@@ -264,8 +266,6 @@ export default function PortfolioPage() {
             <span style={{ fontSize: 12, color: 'var(--text)', opacity: 0.55 }}>Максимальный размер: 25 МБ</span>
           </div>
 
-          {uploadError && <p className={s.errorMsg}>{uploadError}</p>}
-
           <button className={styles.submitBtn} type="submit" disabled={uploading}>
             {uploading ? 'Загружаем...' : 'Сохранить'}
           </button>
@@ -293,9 +293,8 @@ export default function PortfolioPage() {
       />
 
       {loading && <p className={s.empty}>Загрузка...</p>}
-      {error && <p className={s.errorMsg}>{error}</p>}
 
-      {!loading && !error && items.length === 0 && (
+      {!loading && !loadError && items.length === 0 && (
         <div className={styles.emptyBox}>
           <p>Нет записей в портфолио</p>
           {category && (
@@ -306,7 +305,7 @@ export default function PortfolioPage() {
         </div>
       )}
 
-      {!loading && items.length > 0 && (() => {
+      {!loading && !loadError && items.length > 0 && (() => {
         const q = search.trim().toLowerCase();
         const visible = q
           ? items.filter(

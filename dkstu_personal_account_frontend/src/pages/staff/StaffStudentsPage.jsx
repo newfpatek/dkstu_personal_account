@@ -8,6 +8,8 @@ import {
   fetchStudentPortfolioFile,
 } from '../../api/staff';
 import { formatDate } from '../../utils/date';
+import { useToast } from '../../contexts/ToastContext';
+import { getErrorMessage } from '../../utils/error';
 import s from '../student/shared.module.css';
 import styles from './StaffStudentsPage.module.css';
 
@@ -127,20 +129,21 @@ const PORTFOLIO_FILTER_CHIPS = [
 ];
 
 function StudentDetail({ studentId }) {
+  const { showToast } = useToast();
   const [tab, setTab] = useState('grades');
   const [profile, setProfile] = useState(null);
-  const [gradesFlat, setGradesFlat] = useState([]); // latest per discipline
+  const [gradesFlat, setGradesFlat] = useState([]);
   const [scholarship, setScholarship] = useState(null);
   const [portfolio, setPortfolio] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
+  const [loadError, setLoadError] = useState(false);
   const [fileLoadingId, setFileLoadingId] = useState(null);
   const [portCategory, setPortCategory] = useState('');
   const [portSearch, setPortSearch] = useState('');
 
   useEffect(() => {
     setLoading(true);
-    setError('');
+    setLoadError(false);
     setProfile(null);
     setGradesFlat([]);
     setScholarship(null);
@@ -160,7 +163,10 @@ function StudentDetail({ studentId }) {
         setScholarship(schRes.data);
         setPortfolio(portRes.data);
       })
-      .catch(() => setError('Не удалось загрузить данные студента'))
+      .catch((err) => {
+        showToast(getErrorMessage(err, 'Не удалось загрузить данные студента'));
+        setLoadError(true);
+      })
       .finally(() => setLoading(false));
   }, [studentId]);
 
@@ -170,15 +176,15 @@ function StudentDetail({ studentId }) {
       const res = await fetchStudentPortfolioFile(studentId, item.id, inline);
       const contentType = res.headers['content-type'];
       openBlob(res.data, contentType, item.fileName, inline);
-    } catch {
-      alert('Не удалось загрузить файл');
+    } catch (err) {
+      showToast(getErrorMessage(err, 'Не удалось открыть файл'));
     } finally {
       setFileLoadingId(null);
     }
   };
 
   if (loading) return <p className={s.empty}>Загрузка...</p>;
-  if (error) return <p className={s.errorMsg}>{error}</p>;
+  if (loadError) return <p className={s.errorMsg}>Не удалось загрузить данные. Попробуйте обновить страницу.</p>;
   if (!profile) return null;
 
   const initials = profile.fullName
@@ -417,20 +423,20 @@ function StudentDetail({ studentId }) {
 }
 
 export default function StaffStudentsPage() {
+  const { showToast } = useToast();
   const [query, setQuery] = useState('');
   const [students, setStudents] = useState([]);
   const [selectedId, setSelectedId] = useState(null);
   const [loading, setLoading] = useState(false);
   const debounceRef = useRef(null);
 
-  // Initial load (all students) + debounced search
   useEffect(() => {
     if (debounceRef.current) clearTimeout(debounceRef.current);
     debounceRef.current = setTimeout(() => {
       setLoading(true);
       searchStudents(query || undefined)
         .then((r) => setStudents(r.data))
-        .catch(() => {})
+        .catch((err) => showToast(getErrorMessage(err, 'Ошибка поиска студентов')))
         .finally(() => setLoading(false));
     }, 300);
     return () => clearTimeout(debounceRef.current);

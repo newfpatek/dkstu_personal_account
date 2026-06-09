@@ -1,5 +1,7 @@
 import { useState, useEffect } from 'react';
 import { getAllGrades, getGradesHistory, getGpa, getDebts, getMyCurrentSemesterPlan } from '../../api/students';
+import { useToast } from '../../contexts/ToastContext';
+import { getErrorMessage } from '../../utils/error';
 import s from './shared.module.css';
 
 const GRADE_LABELS = {
@@ -33,14 +35,15 @@ function GradeCell({ value }) {
 }
 
 export default function GradesPage() {
+  const { showToast } = useToast();
   const [tab, setTab] = useState('current');
   const [history, setHistory] = useState({});
-  const [plan, setPlan] = useState(null); // { semester, academicYear, entries[] }
+  const [plan, setPlan] = useState(null);
   const [allGrades, setAllGrades] = useState([]);
   const [gpa, setGpa] = useState(null);
   const [debts, setDebts] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
+  const [loadError, setLoadError] = useState(false);
 
   useEffect(() => {
     Promise.all([getGradesHistory(), getGpa(), getDebts(), getMyCurrentSemesterPlan(), getAllGrades()])
@@ -51,7 +54,10 @@ export default function GradesPage() {
         setPlan(planRes.data);
         setAllGrades(allRes.data);
       })
-      .catch(() => setError('Не удалось загрузить данные'))
+      .catch((err) => {
+        showToast(getErrorMessage(err, 'Не удалось загрузить данные'));
+        setLoadError(true);
+      })
       .finally(() => setLoading(false));
   }, []);
 
@@ -60,7 +66,7 @@ export default function GradesPage() {
   const years = Object.keys(history).sort().reverse();
 
   if (loading) return <p className={s.empty}>Загрузка...</p>;
-  if (error) return <p className={s.errorMsg}>{error}</p>;
+  if (loadError) return <p className={s.errorMsg}>Не удалось загрузить данные. Попробуйте обновить страницу.</p>;
 
   return (
     <div>

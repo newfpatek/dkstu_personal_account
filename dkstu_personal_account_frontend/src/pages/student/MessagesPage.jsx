@@ -4,6 +4,8 @@ import {
   getMessageUsers, searchRecipients, setMessageRelevance,
 } from '../../api/messages';
 import { formatDateTime } from '../../utils/date';
+import { useToast } from '../../contexts/ToastContext';
+import { getErrorMessage } from '../../utils/error';
 import s from './shared.module.css';
 import styles from './MessagesPage.module.css';
 
@@ -185,6 +187,7 @@ function MsgItem({ msg, tab, onToggleRelevance }) {
 }
 
 export default function MessagesPage() {
+  const { showToast } = useToast();
   const currentUserRole = JSON.parse(localStorage.getItem('user') || '{}').role || 'student';
   const isStudent = currentUserRole === 'student';
 
@@ -192,19 +195,19 @@ export default function MessagesPage() {
   const [inbox, setInbox] = useState([]);
   const [sent, setSent] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
+  const [loadError, setLoadError] = useState(false);
   const [showCompose, setShowCompose] = useState(false);
   const [showIrrelevant, setShowIrrelevant] = useState(false);
 
   const [recipientId, setRecipientId] = useState(null);
-  const [recipientKind, setRecipientKind] = useState('user'); // 'user' | 'group'
+  const [recipientKind, setRecipientKind] = useState('user');
   const [msgText, setMsgText] = useState('');
   const [sending, setSending] = useState(false);
   const [sendError, setSendError] = useState('');
 
   const loadAll = () => {
     setLoading(true);
-    setError('');
+    setLoadError(false);
     Promise.all([
       getInbox().then((r) => r.data),
       getSent().then((r) => r.data),
@@ -213,7 +216,10 @@ export default function MessagesPage() {
         setInbox(applyLocalOverrides(inboxData));
         setSent(sentData);
       })
-      .catch(() => setError('Не удалось загрузить сообщения'))
+      .catch((err) => {
+        showToast(getErrorMessage(err, 'Не удалось загрузить сообщения'));
+        setLoadError(true);
+      })
       .finally(() => setLoading(false));
   };
 
@@ -252,7 +258,7 @@ export default function MessagesPage() {
       setShowCompose(false);
       loadAll();
     } catch (err) {
-      setSendError(err.response?.data?.message || 'Ошибка при отправке');
+      showToast(getErrorMessage(err, 'Ошибка при отправке сообщения'));
     } finally {
       setSending(false);
     }
@@ -322,9 +328,8 @@ export default function MessagesPage() {
       </div>
 
       {loading && <p className={s.empty}>Загрузка...</p>}
-      {error && <p className={s.errorMsg}>{error}</p>}
 
-      {!loading && !error && tab === 'inbox' && (
+      {!loading && !loadError && tab === 'inbox' && (
         <>
           <div className={styles.sectionHeader}>
             <span className={styles.sectionTitle}>Актуальные</span>
@@ -365,7 +370,7 @@ export default function MessagesPage() {
         </>
       )}
 
-      {!loading && !error && tab === 'sent' && (
+      {!loading && !loadError && tab === 'sent' && (
         sent.length === 0 ? (
           <p className={s.empty}>Нет отправленных сообщений</p>
         ) : (

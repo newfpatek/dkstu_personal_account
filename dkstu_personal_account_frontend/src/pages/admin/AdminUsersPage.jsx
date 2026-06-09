@@ -7,6 +7,8 @@ import {
   deleteUser,
   importUsers,
 } from '../../api/admin';
+import { useToast } from '../../contexts/ToastContext';
+import { getErrorMessage } from '../../utils/error';
 import s from '../student/shared.module.css';
 import styles from './AdminUsersPage.module.css';
 
@@ -290,6 +292,7 @@ function ImportResult({ result, onClose }) {
 }
 
 export default function AdminUsersPage() {
+  const { showToast } = useToast();
   const [roleFilter, setRoleFilter] = useState('');
   const [query, setQuery] = useState('');
   const [users, setUsers] = useState([]);
@@ -298,17 +301,16 @@ export default function AdminUsersPage() {
   const [selectedUser, setSelectedUser] = useState(null);
   const [mode, setMode] = useState(null);
   const [formLoading, setFormLoading] = useState(false);
-  const [formError, setFormError] = useState('');
   const [importLoading, setImportLoading] = useState(false);
   const [importResult, setImportResult] = useState(null);
-  const [passwordModal, setPasswordModal] = useState(null); // { email, password }
+  const [passwordModal, setPasswordModal] = useState(null);
   const fileInputRef = useRef(null);
 
   const loadUsers = (role) => {
     setLoading(true);
     getUsers(role || undefined)
       .then((r) => setUsers(r.data))
-      .catch(() => {})
+      .catch((err) => showToast(getErrorMessage(err, 'Не удалось загрузить пользователей')))
       .finally(() => setLoading(false));
   };
 
@@ -330,13 +332,11 @@ export default function AdminUsersPage() {
     setSelectedId(user.id);
     setSelectedUser(user);
     setMode(null);
-    setFormError('');
     setImportResult(null);
   };
 
   const handleCreate = async (payload) => {
     setFormLoading(true);
-    setFormError('');
     try {
       const res = await createUser(payload);
       loadUsers(roleFilter);
@@ -345,7 +345,7 @@ export default function AdminUsersPage() {
         setPasswordModal({ email: res.data.email, password: res.data.generatedPassword });
       }
     } catch (e) {
-      setFormError(e.response?.data?.message || 'Ошибка при создании пользователя');
+      showToast(getErrorMessage(e, 'Ошибка при создании пользователя'));
     } finally {
       setFormLoading(false);
     }
@@ -353,13 +353,12 @@ export default function AdminUsersPage() {
 
   const handleUpdate = async (payload) => {
     setFormLoading(true);
-    setFormError('');
     try {
       await updateUser(selectedId, payload);
       loadUsers(roleFilter);
       setMode(null);
     } catch (e) {
-      setFormError(e.response?.data?.message || 'Ошибка при сохранении');
+      showToast(getErrorMessage(e, 'Ошибка при сохранении'));
     } finally {
       setFormLoading(false);
     }
@@ -373,7 +372,7 @@ export default function AdminUsersPage() {
       setSelectedUser(null);
       loadUsers(roleFilter);
     } catch (e) {
-      alert(e.response?.data?.message || 'Ошибка при удалении');
+      showToast(getErrorMessage(e, 'Ошибка при удалении'));
     }
   };
 
@@ -500,7 +499,7 @@ export default function AdminUsersPage() {
                 onSave={handleCreate}
                 onCancel={() => setMode(null)}
                 loading={formLoading}
-                error={formError}
+                error=""
               />
             </div>
           )}
@@ -513,7 +512,7 @@ export default function AdminUsersPage() {
                 onSave={handleUpdate}
                 onCancel={() => setMode(null)}
                 loading={formLoading}
-                error={formError}
+                error=""
               />
             </div>
           )}

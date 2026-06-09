@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react';
 import { getScholarship } from '../../api/students';
 import { formatDate } from '../../utils/date';
+import { useToast } from '../../contexts/ToastContext';
+import { getErrorMessage } from '../../utils/error';
 import s from './shared.module.css';
 import styles from './ScholarshipPage.module.css';
 
@@ -30,19 +32,23 @@ function formatAmount(amount) {
 }
 
 export default function ScholarshipPage() {
+  const { showToast } = useToast();
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
+  const [loadError, setLoadError] = useState(false);
 
   useEffect(() => {
     getScholarship()
       .then((res) => setData(res.data))
-      .catch(() => setError('Не удалось загрузить данные о стипендии'))
+      .catch((err) => {
+        showToast(getErrorMessage(err, 'Не удалось загрузить данные о стипендии'));
+        setLoadError(true);
+      })
       .finally(() => setLoading(false));
   }, []);
 
   if (loading) return <p className={s.empty}>Загрузка...</p>;
-  if (error) return <p className={s.errorMsg}>{error}</p>;
+  if (loadError) return <p className={s.errorMsg}>Не удалось загрузить данные. Попробуйте обновить страницу.</p>;
 
   const { isPaid, scholarships } = data;
 

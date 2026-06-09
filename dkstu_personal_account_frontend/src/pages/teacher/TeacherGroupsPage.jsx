@@ -1,5 +1,7 @@
 import { useState, useEffect } from 'react';
 import { getTeacherGroups, getTeacherGroupStudents } from '../../api/teacher';
+import { useToast } from '../../contexts/ToastContext';
+import { getErrorMessage } from '../../utils/error';
 import s from '../student/shared.module.css';
 import styles from './TeacherGroupsPage.module.css';
 
@@ -44,12 +46,13 @@ function GroupCard({ group, onSelect, selected }) {
 }
 
 export default function TeacherGroupsPage() {
+  const { showToast } = useToast();
   const [groups, setGroups] = useState([]);
   const [selectedGroupId, setSelectedGroupId] = useState(null);
   const [detail, setDetail] = useState(null);
   const [loadingGroups, setLoadingGroups] = useState(true);
   const [loadingDetail, setLoadingDetail] = useState(false);
-  const [error, setError] = useState('');
+  const [loadError, setLoadError] = useState(false);
 
   useEffect(() => {
     getTeacherGroups()
@@ -57,7 +60,10 @@ export default function TeacherGroupsPage() {
         setGroups(r.data);
         if (r.data.length > 0) setSelectedGroupId(r.data[0].id);
       })
-      .catch(() => setError('Не удалось загрузить группы'))
+      .catch((err) => {
+        showToast(getErrorMessage(err, 'Не удалось загрузить группы'));
+        setLoadError(true);
+      })
       .finally(() => setLoadingGroups(false));
   }, []);
 
@@ -67,12 +73,12 @@ export default function TeacherGroupsPage() {
     setDetail(null);
     getTeacherGroupStudents(selectedGroupId)
       .then((r) => setDetail(r.data))
-      .catch(() => setError('Не удалось загрузить состав группы'))
+      .catch((err) => showToast(getErrorMessage(err, 'Не удалось загрузить состав группы')))
       .finally(() => setLoadingDetail(false));
   }, [selectedGroupId]);
 
   if (loadingGroups) return <p className={s.empty}>Загрузка...</p>;
-  if (error) return <p className={s.errorMsg}>{error}</p>;
+  if (loadError) return <p className={s.errorMsg}>Не удалось загрузить данные. Попробуйте обновить страницу.</p>;
 
   if (groups.length === 0) {
     return (
