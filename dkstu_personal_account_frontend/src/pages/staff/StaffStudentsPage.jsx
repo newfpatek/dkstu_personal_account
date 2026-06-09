@@ -274,14 +274,14 @@ function StudentDetail({ studentId }) {
               <tbody>
                 {gradesFlat.map((g) => (
                   <tr key={g.id}>
-                    <td>{g.discipline?.name || '—'}</td>
-                    <td style={{ color: 'var(--text)', fontSize: 13 }}>
+                    <td data-label="Дисциплина">{g.discipline?.name || '—'}</td>
+                    <td data-label="Тип" style={{ color: 'var(--text)', fontSize: 13 }}>
                       {g.discipline?.disciplineType === 'exam' ? 'Экзамен' : 'Зачёт'}
                     </td>
-                    <td style={{ color: 'var(--text)', fontSize: 13 }}>
-                      {g.semester}
+                    <td data-label="Семестр" style={{ color: 'var(--text)', fontSize: 13 }}>
+                      {g.semester} сем.
                     </td>
-                    <td>
+                    <td data-label="Оценка">
                       <GradeCell value={g.gradeValue} />
                       {g.isDebt && (
                         <span className={`${s.badge} ${s.debtBadge}`}>Долг</span>

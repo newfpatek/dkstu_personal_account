@@ -127,11 +127,11 @@ export default function GradesPage() {
                 <tbody>
                   {plan.entries.map((entry) => (
                     <tr key={entry.disciplineId}>
-                      <td>{entry.discipline?.name || '—'}</td>
-                      <td style={{ color: 'var(--text)', fontSize: 13 }}>
+                      <td data-label="Дисциплина">{entry.discipline?.name || '—'}</td>
+                      <td data-label="Тип" style={{ color: 'var(--text)', fontSize: 13 }}>
                         {entry.discipline?.disciplineType === 'exam' ? 'Экзамен' : 'Зачёт'}
                       </td>
-                      <td>
+                      <td data-label="Оценка">
                         {entry.gradeValue ? (
                           <>
                             <GradeCell value={entry.gradeValue} />
@@ -171,14 +171,14 @@ export default function GradesPage() {
               <tbody>
                 {allGrades.map((g) => (
                   <tr key={g.id}>
-                    <td>{g.discipline?.name || '—'}</td>
-                    <td style={{ color: 'var(--text)', fontSize: 13 }}>
+                    <td data-label="Дисциплина">{g.discipline?.name || '—'}</td>
+                    <td data-label="Тип" style={{ color: 'var(--text)', fontSize: 13 }}>
                       {g.discipline?.disciplineType === 'exam' ? 'Экзамен' : 'Зачёт'}
                     </td>
-                    <td style={{ color: 'var(--text)', fontSize: 13 }}>
-                      {g.semester}
+                    <td data-label="Семестр" style={{ color: 'var(--text)', fontSize: 13 }}>
+                      {g.semester} сем.
                     </td>
-                    <td>
+                    <td data-label="Оценка">
                       <GradeCell value={g.gradeValue} />
                       {g.isDebt && (
                         <span className={`${s.badge} ${s.debtBadge}`}>Долг</span>
@@ -206,7 +206,11 @@ export default function GradesPage() {
                   .map((sem) => (
                     <div key={sem}>
                       <h4 className={s.semesterTitle}>{sem} семестр</h4>
-                      <table className={s.table}>
+                      <table className={s.table} style={{ tableLayout: 'fixed' }}>
+                        <colgroup>
+                          <col style={{ width: '72%' }} />
+                          <col style={{ width: '28%' }} />
+                        </colgroup>
                         <thead>
                           <tr>
                             <th>Дисциплина</th>
@@ -216,8 +220,8 @@ export default function GradesPage() {
                         <tbody>
                           {history[year][sem].map((g) => (
                             <tr key={g.id}>
-                              <td>{g.discipline?.name || '—'}</td>
-                              <td>
+                              <td data-label="Дисциплина">{g.discipline?.name || '—'}</td>
+                              <td data-label="Оценка">
                                 <GradeCell value={g.gradeValue} />
                               </td>
                             </tr>
@@ -248,11 +252,11 @@ export default function GradesPage() {
             <tbody>
               {debts.map((g) => (
                 <tr key={g.id}>
-                  <td>{g.discipline?.name || '—'}</td>
-                  <td style={{ color: 'var(--text)', fontSize: 13 }}>
+                  <td data-label="Дисциплина">{g.discipline?.name || '—'}</td>
+                  <td data-label="Период" style={{ color: 'var(--text)', fontSize: 13 }}>
                     {g.academicYear}, {g.semester} сем.
                   </td>
-                  <td>
+                  <td data-label="Оценка">
                     <GradeCell value={g.gradeValue} />
                   </td>
                 </tr>

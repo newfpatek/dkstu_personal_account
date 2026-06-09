@@ -350,3 +350,13 @@
   color: var(--text);
   margin-bottom: 16px;
 }
+
+@media (max-width: 768px) {
+  .splitLayout {
+    grid-template-columns: 1fr;
+  }
+
+  .studentList {
+    max-height: 280px;
+  }
+}

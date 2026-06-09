@@ -575,3 +575,13 @@
   display: flex;
   justify-content: flex-end;
 }
+
+@media (max-width: 768px) {
+  .splitLayout {
+    grid-template-columns: 1fr;
+  }
+
+  .userList {
+    max-height: 280px;
+  }
+}

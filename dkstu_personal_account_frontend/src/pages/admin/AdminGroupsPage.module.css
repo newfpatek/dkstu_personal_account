@@ -491,3 +491,13 @@
   opacity: 0.75;
   margin: 0 0 14px;
 }
+
+@media (max-width: 768px) {
+  .splitLayout {
+    grid-template-columns: 1fr;
+  }
+
+  .groupList {
+    max-height: 250px;
+  }
+}

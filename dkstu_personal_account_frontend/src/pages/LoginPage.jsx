@@ -2,55 +2,86 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { loginRequest } from '../api/auth';
 import { getErrorMessage } from '../utils/error';
+import styles from './LoginPage.module.css';
 
 export default function LoginPage() {
   const navigate = useNavigate();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
 
   const handleLogin = async (e) => {
     e.preventDefault();
     setError('');
+    setLoading(true);
 
     try {
       const response = await loginRequest(email, password);
       const { access_token, user } = response.data;
 
-      // Сохраняем токен и данные пользователя
       localStorage.setItem('access_token', access_token);
       localStorage.setItem('user', JSON.stringify(user));
 
-      // Редирект по роли
       if (user.role === 'admin') navigate('/admin');
       else if (user.role === 'teacher') navigate('/teacher');
       else if (user.role === 'staff') navigate('/staff');
       else navigate('/student');
-
     } catch (err) {
       setError(getErrorMessage(err, 'Неверный email или пароль'));
+    } finally {
+      setLoading(false);
     }
   };
 
   return (
-    <div>
-      <h1>Вход</h1>
-      <form onSubmit={handleLogin}>
-        <input
-          type="email"
-          placeholder="Email"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-        />
-        <input
-          type="password"
-          placeholder="Пароль"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-        />
-        {error && <p style={{ color: 'red' }}>{error}</p>}
-        <button type="submit">Войти</button>
-      </form>
+    <div className={styles.page}>
+      <div className={styles.overlay} />
+
+      <div className={styles.card}>
+        <div className={styles.logoWrap}>
+          <div className={styles.logoText}>
+            <span className={styles.logoName}>КГТУ им. В.А. Дегтярева</span>
+            <span className={styles.logoSub}>Личный кабинет</span>
+          </div>
+        </div>
+
+        <p className={styles.title}>Вход в систему</p>
+
+        <form className={styles.form} onSubmit={handleLogin}>
+          <div className={styles.field}>
+            <label className={styles.label}>Email</label>
+            <input
+              className={styles.input}
+              type="email"
+              placeholder="example@kgtu.ru"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              autoComplete="email"
+              required
+            />
+          </div>
+
+          <div className={styles.field}>
+            <label className={styles.label}>Пароль</label>
+            <input
+              className={styles.input}
+              type="password"
+              placeholder="••••••••"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              autoComplete="current-password"
+              required
+            />
+          </div>
+
+          {error && <div className={styles.error}>{error}</div>}
+
+          <button className={styles.submitBtn} type="submit" disabled={loading}>
+            {loading ? 'Вход...' : 'Войти'}
+          </button>
+        </form>
+      </div>
     </div>
   );
 }

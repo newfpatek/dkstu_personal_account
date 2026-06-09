@@ -17,7 +17,16 @@ export default function StaffPage() {
   return (
     <div className={styles.layout}>
       <header className={styles.header}>
-        <span className={styles.logo}>КГТУ — Личный кабинет</span>
+        <div className={styles.logoArea}>
+          <a href="https://dksta.ru/" target="_blank" rel="noopener noreferrer" className={styles.logoImgLink}>
+            <img src="/logo.svg" alt="КГТУ" className={styles.logoImg} />
+          </a>
+          <div>
+            <a href="https://dksta.ru/" target="_blank" rel="noopener noreferrer" className={styles.logoLink}>КГТУ им. В.А. Дегтярева</a>
+            <div className={styles.logoSub}>Личный кабинет</div>
+            <div className={styles.logoUserName}>{user.fullName}</div>
+          </div>
+        </div>
         <div className={styles.userBlock}>
           <span className={styles.userName}>{user.fullName}</span>
           <button className={styles.logoutBtn} onClick={handleLogout}>
@@ -35,10 +44,12 @@ export default function StaffPage() {
 
           <span className={styles.navLabel}>Навигация</span>
           <NavLink to="/staff/students" className={navClass}>
-            Студенты
+            <span className={styles.navFull}>Студенты</span>
+            <span className={styles.navShort}>Студенты</span>
           </NavLink>
           <NavLink to="/staff/messages" className={navClass}>
-            Сообщения
+            <span className={styles.navFull}>Сообщения</span>
+            <span className={styles.navShort}>Сообщения</span>
           </NavLink>
         </nav>
 

@@ -56,9 +56,9 @@ export default function GroupPage() {
               <tbody>
                 {group.members.map((member, idx) => (
                   <tr key={member.id}>
-                    <td className={styles.numCell}>{idx + 1}</td>
-                    <td>{member.fullName}</td>
-                    <td>
+                    <td data-label="№" className={styles.numCell}>{idx + 1}</td>
+                    <td data-label="ФИО">{member.fullName}</td>
+                    <td data-label="Роль в группе">
                       {member.groupRole && (
                         <span className={styles.roleTag}>{member.groupRole}</span>
                       )}

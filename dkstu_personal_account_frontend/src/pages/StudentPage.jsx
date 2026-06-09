@@ -26,7 +26,16 @@ export default function StudentPage() {
   return (
     <div className={styles.layout}>
       <header className={styles.header}>
-        <span className={styles.logo}>КГТУ — Личный кабинет</span>
+        <div className={styles.logoArea}>
+          <a href="https://dksta.ru/" target="_blank" rel="noopener noreferrer" className={styles.logoImgLink}>
+            <img src="/logo.svg" alt="КГТУ" className={styles.logoImg} />
+          </a>
+          <div>
+            <a href="https://dksta.ru/" target="_blank" rel="noopener noreferrer" className={styles.logoLink}>КГТУ им. В.А. Дегтярева</a>
+            <div className={styles.logoSub}>Личный кабинет</div>
+            <div className={styles.logoUserName}>{user.fullName}</div>
+          </div>
+        </div>
         <div className={styles.userBlock}>
           <span className={styles.userName}>{user.fullName}</span>
           <button className={styles.logoutBtn} onClick={handleLogout}>
@@ -50,19 +59,24 @@ export default function StudentPage() {
 
           <span className={styles.navLabel}>Навигация</span>
           <NavLink to="/student/group" className={navClass}>
-            Моя группа
+            <span className={styles.navFull}>Моя группа</span>
+            <span className={styles.navShort}>Группа</span>
           </NavLink>
           <NavLink to="/student/grades" className={navClass}>
-            Зачётная книжка
+            <span className={styles.navFull}>Зачётная книжка</span>
+            <span className={styles.navShort}>Оценки</span>
           </NavLink>
           <NavLink to="/student/scholarship" className={navClass}>
-            Стипендия
+            <span className={styles.navFull}>Стипендия</span>
+            <span className={styles.navShort}>Стипендия</span>
           </NavLink>
           <NavLink to="/student/portfolio" className={navClass}>
-            Портфолио
+            <span className={styles.navFull}>Портфолио</span>
+            <span className={styles.navShort}>Портфолио</span>
           </NavLink>
           <NavLink to="/student/messages" className={navClass}>
-            Сообщения
+            <span className={styles.navFull}>Сообщения</span>
+            <span className={styles.navShort}>Сообщения</span>
           </NavLink>
         </nav>
 

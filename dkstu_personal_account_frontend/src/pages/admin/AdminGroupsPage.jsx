@@ -463,11 +463,11 @@ function GroupDisciplinesPanel({ groupId }) {
             <tbody>
               {planEntries.map((e) => (
                 <tr key={e.id}>
-                  <td>{e.discipline?.name}</td>
-                  <td style={{ fontSize: 13, color: 'var(--text)' }}>
+                  <td data-label="Дисциплина">{e.discipline?.name}</td>
+                  <td data-label="Тип" style={{ fontSize: 13, color: 'var(--text)' }}>
                     {e.discipline?.disciplineType === 'exam' ? 'Экзамен' : 'Зачёт'}
                   </td>
-                  <td>
+                  <td data-label="">
                     <button
                       className={styles.btnTinyDanger}
                       onClick={() => handleRemovePlan(e.id)}
@@ -573,22 +573,22 @@ function GroupDetail({ group, onDeleted, onRefresh }) {
                 .sort((a, b) => a.fullName.localeCompare(b.fullName, 'ru'))
                 .map((m) => (
                   <tr key={m.id}>
-                    <td>{m.fullName}</td>
-                    <td>
+                    <td data-label="ФИО">{m.fullName}</td>
+                    <td data-label="Роль в группе">
                       {m.groupRole ? (
                         <span className={styles.groupRoleTag}>{m.groupRole}</span>
                       ) : (
                         <span style={{ color: 'var(--text)', opacity: 0.45, fontSize: 13 }}>—</span>
                       )}
                     </td>
-                    <td>
+                    <td data-label="Обучение">
                       {m.isPaid ? (
                         <span className={styles.paidTag}>Контракт</span>
                       ) : (
                         <span style={{ color: 'var(--text)', opacity: 0.55, fontSize: 13 }}>Бюджет</span>
                       )}
                     </td>
-                    <td>
+                    <td data-label="">
                       <div style={{ display: 'flex', gap: 6 }}>
                         <button
                           className={styles.btnTiny}
@@ -629,15 +629,15 @@ function GroupDetail({ group, onDeleted, onRefresh }) {
             <tbody>
               {others.map((m) => (
                 <tr key={m.id}>
-                  <td>{m.fullName}</td>
-                  <td>
+                  <td data-label="ФИО">{m.fullName}</td>
+                  <td data-label="Роль">
                     <span
                       style={{ color: ROLE_COLORS[m.role], fontWeight: 500, fontSize: 13 }}
                     >
                       {ROLE_LABELS[m.role] || m.role}
                     </span>
                   </td>
-                  <td>
+                  <td data-label="">
                     <button
                       className={styles.btnTinyDanger}
                       onClick={() => handleRemove(m)}

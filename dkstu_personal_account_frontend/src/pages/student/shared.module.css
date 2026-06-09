@@ -151,3 +151,94 @@
   text-transform: uppercase;
   letter-spacing: 0.4px;
 }
+
+/* ── Mobile table → cards ───────────────────────────────── */
+@media (max-width: 768px) {
+  .table {
+    display: block;
+    width: 100%;
+  }
+
+  .table thead { display: none; }
+
+  .table tbody { display: block; }
+
+  /* Row as flex container so cells can sit side-by-side */
+  .table tr {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    margin-bottom: 10px;
+    padding: 10px 14px;
+    background: var(--bg);
+  }
+
+  .table tr:hover td { background: transparent; }
+
+  /* Default: each cell occupies full row */
+  .table td {
+    flex: 0 0 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    padding: 5px 0;
+    border-bottom: none;
+    gap: 2px;
+    box-sizing: border-box;
+  }
+
+  .table td::before {
+    content: attr(data-label);
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--text);
+    opacity: 0.5;
+  }
+
+  .table td[data-label=""]::before { display: none; }
+
+  /* № cell: compact inline "№ 1" */
+  .table td[data-label="№"] {
+    flex-direction: row;
+    align-items: center;
+    gap: 4px;
+    padding-bottom: 6px;
+    font-size: 12px;
+    opacity: 0.55;
+  }
+
+  .table td[data-label="№"]::before {
+    font-size: 12px;
+    font-weight: 500;
+    text-transform: none;
+    letter-spacing: 0;
+    opacity: 1;
+  }
+
+  /* Тип, Семестр, Период — компактная метаданные в одну строку */
+  .table td[data-label="Тип"],
+  .table td[data-label="Семестр"],
+  .table td[data-label="Период"] {
+    flex: 0 0 auto;
+    flex-direction: row;
+    align-items: center;
+    gap: 4px;
+    padding: 0 12px 4px 0;
+    font-size: 12px;
+    opacity: 0.6;
+  }
+
+  .table td[data-label="Тип"]::before,
+  .table td[data-label="Семестр"]::before,
+  .table td[data-label="Период"]::before {
+    display: none;
+  }
+
+  .table td:empty { display: none; }
+
+  .table td:last-child { padding-bottom: 0; }
+}

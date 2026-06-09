@@ -9,20 +9,20 @@ function StudentRow({ student, idx }) {
   const hasDebts = student.debtCount > 0;
   return (
     <tr>
-      <td className={styles.numCell}>{idx + 1}</td>
-      <td>
+      <td data-label="№" className={styles.numCell}>{idx + 1}</td>
+      <td data-label="ФИО">
         <span>{student.fullName}</span>
         {student.groupRole && (
           <span className={styles.roleTag}>{student.groupRole}</span>
         )}
       </td>
-      <td>
+      <td data-label="Обучение">
         {student.isPaid ? (
           <span className={styles.paidBadge}>Контракт</span>
         ) : null}
       </td>
-      <td className={styles.statCell}>{student.totalGrades}</td>
-      <td className={styles.statCell}>
+      <td data-label="Оценок" className={styles.statCell}>{student.totalGrades}</td>
+      <td data-label="Долгов" className={styles.statCell}>
         {hasDebts ? (
           <span className={`${s.badge} ${s.debtBadge}`}>{student.debtCount}</span>
         ) : (
