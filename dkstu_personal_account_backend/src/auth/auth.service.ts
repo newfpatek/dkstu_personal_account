@@ -16,26 +16,26 @@ export class AuthService {
 
   // --- ЛОГИН ---
   async login(dto: LoginDto) {
-    // Ищем пользователя по email
+    // Ищем пользователя по номеру телефона — основной идентификатор для входа
     const user = await this.userRepository.findOne({
-      where: { email: dto.email },
+      where: { phone: dto.phone },
     });
 
+    // Одинаковое сообщение для «не найден» и «неверный пароль» — намеренно:
+    // разные сообщения дают злоумышленнику подсказку о существовании аккаунта (user enumeration).
     if (!user) {
-      throw new UnauthorizedException('Неверный email или пароль');
+      throw new UnauthorizedException('Неверный номер телефона или пароль');
     }
 
-    // Сравниваем пароль с хэшем в БД
     const isPasswordValid = await bcrypt.compare(dto.password, user.password);
 
     if (!isPasswordValid) {
-      throw new UnauthorizedException('Неверный email или пароль');
+      throw new UnauthorizedException('Неверный номер телефона или пароль');
     }
 
-    // Формируем payload — данные, которые "зашьём" в токен
     const payload = {
-      sub: user.id,       // sub — стандартное поле JWT (subject = кто это)
-      email: user.email,
+      sub: user.id,
+      phone: user.phone,
       role: user.role,
     };
 
@@ -46,7 +46,8 @@ export class AuthService {
       access_token: token,
       user: {
         id: user.id,
-        email: user.email,
+        phone: user.phone,
+        email: user.email,      // может быть null
         fullName: user.fullName,
         role: user.role,
       },

@@ -15,8 +15,19 @@ export class User {
   @Column({ name: 'name', length: 255 })
   fullName!: string;
 
-  @Column({ length: 255, unique: true })
-  email!: string;
+  // Телефон в формате E.164 (+71234567890) — используется как логин.
+  // Уникален: один номер = одна учётная запись.
+  @Column({ length: 20, unique: true })
+  phone!: string;
+
+  // Email необязателен — студент может не предоставить его при поступлении.
+  // nullable: true + unique: true → PostgreSQL допускает несколько NULL (NULL != NULL).
+  @Column({ type: 'varchar', length: 255, unique: true, nullable: true })
+  email!: string | null;
+
+  // Номер зачётной книжки — только для студентов, для других ролей null.
+  @Column({ name: 'grade_book', type: 'varchar', length: 50, unique: true, nullable: true })
+  gradeBook!: string | null;
 
   @Column({ name: 'password_hash', length: 255 })
   password!: string;

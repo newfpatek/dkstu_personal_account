@@ -46,10 +46,9 @@ export const removeGroupRole = (groupId, userId) =>
   api.delete(`/admin/groups/${groupId}/users/${userId}/role`);
 
 // Group semester disciplines
-export const getGroupSemesterDisciplines = (groupId, semester, academicYear) => {
+export const getGroupSemesterDisciplines = (groupId, semester) => {
   const params = { groupId };
   if (semester !== undefined) params.semester = semester;
-  if (academicYear) params.academicYear = academicYear;
   return api.get('/admin/group-disciplines', { params });
 };
 
@@ -71,8 +70,8 @@ export const createDiscipline = (name, type) =>
   api.post('/admin/disciplines', { name, type });
 
 // Grades
-export const getGroupGrades = (groupId, disciplineId, semester, academicYear) =>
-  api.get('/admin/grades', { params: { groupId, disciplineId, semester, academicYear } });
+export const getGroupGrades = (groupId, disciplineId, semester) =>
+  api.get('/admin/grades', { params: { groupId, disciplineId, semester } });
 
 export const upsertGrades = (data) => api.post('/admin/grades', data);
 

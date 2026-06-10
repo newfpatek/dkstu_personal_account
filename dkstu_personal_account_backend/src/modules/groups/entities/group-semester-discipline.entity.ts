@@ -26,9 +26,6 @@ export class GroupSemesterDiscipline {
   @Column({ type: 'integer' })
   semester: number;
 
-  @Column({ name: 'academic_year', length: 9 })
-  academicYear: string;
-
   @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;
 }

@@ -1,7 +1,8 @@
 import { apiClient } from './client';
 
-export const loginRequest = (email, password) =>
-  apiClient.post('/auth/login', { email, password });
+// phone — номер в формате E.164 (+71234567890), является логином
+export const loginRequest = (phone, password) =>
+  apiClient.post('/auth/login', { phone, password });
 
 export const registerRequest = (email, password, fullName) =>
   apiClient.post('/auth/register', { email, password, fullName });

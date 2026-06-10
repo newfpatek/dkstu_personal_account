@@ -8,9 +8,8 @@ export class AddGroupSemesterDisciplines1779349780800 implements MigrationInterf
         group_id UUID NOT NULL REFERENCES groups(id) ON DELETE CASCADE,
         discipline_id UUID NOT NULL REFERENCES disciplines(id) ON DELETE CASCADE,
         semester INTEGER NOT NULL,
-        academic_year VARCHAR(9) NOT NULL,
         created_at TIMESTAMPTZ DEFAULT now(),
-        CONSTRAINT uq_group_sem_disc UNIQUE(group_id, discipline_id, semester, academic_year)
+        CONSTRAINT uq_group_sem_disc UNIQUE(group_id, discipline_id, semester)
       );
     `);
   }

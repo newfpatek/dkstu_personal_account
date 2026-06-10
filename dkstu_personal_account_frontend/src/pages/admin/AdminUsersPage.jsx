@@ -36,7 +36,9 @@ const ROLE_COLORS = {
 
 const EMPTY_FORM = {
   name: '',
+  phone: '',
   email: '',
+  gradeBook: '',
   password: '',
   role: 'student',
   isPaid: false,
@@ -50,7 +52,7 @@ function downloadExcel(rows, filename) {
   XLSX.writeFile(wb, filename);
 }
 
-function PasswordModal({ email, password, onClose }) {
+function PasswordModal({ phone, password, onClose }) {
   const [copied, setCopied] = useState(false);
 
   const handleCopy = () => {
@@ -65,8 +67,8 @@ function PasswordModal({ email, password, onClose }) {
         <h3 className={styles.modalTitle}>Пользователь создан</h3>
         <p className={styles.modalHint}>Запишите пароль — он больше не будет показан.</p>
         <div className={styles.modalRow}>
-          <span className={styles.modalLabel}>Email:</span>
-          <span className={styles.modalValue}>{email}</span>
+          <span className={styles.modalLabel}>Телефон:</span>
+          <span className={styles.modalValue}>{phone}</span>
         </div>
         <div className={styles.modalRow}>
           <span className={styles.modalLabel}>Пароль:</span>
@@ -109,13 +111,23 @@ function UserForm({ initial, onSave, onCancel, loading, error }) {
         />
       </div>
       <div className={styles.formRow}>
-        <label className={styles.label}>Email</label>
+        <label className={styles.label}>Телефон (логин, формат +71234567890)</label>
+        <input
+          className={styles.input}
+          type="tel"
+          value={form.phone}
+          onChange={(e) => set('phone', e.target.value)}
+          required={!initial}
+          placeholder="+71234567890"
+        />
+      </div>
+      <div className={styles.formRow}>
+        <label className={styles.label}>Email (необязательно)</label>
         <input
           className={styles.input}
           type="email"
           value={form.email}
           onChange={(e) => set('email', e.target.value)}
-          required
           placeholder="example@mail.ru"
         />
       </div>
@@ -147,16 +159,31 @@ function UserForm({ initial, onSave, onCancel, loading, error }) {
         </div>
       )}
       {form.role === 'student' && (
-        <div className={styles.formRow}>
-          <label className={styles.checkLabel}>
+        <>
+          <div className={styles.formRow}>
+            <label className={styles.label}>
+              Номер зачётной книжки{!initial && <span style={{ color: '#dc2626' }}> *</span>}
+            </label>
             <input
-              type="checkbox"
-              checked={form.isPaid}
-              onChange={(e) => set('isPaid', e.target.checked)}
+              className={styles.input}
+              value={form.gradeBook || ''}
+              onChange={(e) => set('gradeBook', e.target.value)}
+              required={!initial}
+              placeholder="12345"
+              maxLength={50}
             />
-            Платное обучение (контрактник)
-          </label>
-        </div>
+          </div>
+          <div className={styles.formRow}>
+            <label className={styles.checkLabel}>
+              <input
+                type="checkbox"
+                checked={form.isPaid}
+                onChange={(e) => set('isPaid', e.target.checked)}
+              />
+              Платное обучение (контрактник)
+            </label>
+          </div>
+        </>
       )}
       {error && <p className={s.errorMsg}>{error}</p>}
       <div className={styles.formActions}>
@@ -182,7 +209,9 @@ function UserDetail({ user, onEdit, onDelete }) {
         <div className={styles.profileAvatar}>{initials}</div>
         <div className={styles.profileInfo}>
           <span className={styles.profileFullName}>{user.fullName}</span>
-          <span className={styles.profileEmail}>{user.email}</span>
+          <span className={styles.profileEmail}>{user.phone}</span>
+          {user.email && <span className={styles.profileEmail}>{user.email}</span>}
+          {user.gradeBook && <span className={styles.profileEmail}>Зачетная книжка {user.gradeBook}</span>}
           <div style={{ display: 'flex', gap: 8, marginTop: 6, flexWrap: 'wrap' }}>
             <span
               className={styles.roleBadge}
@@ -239,7 +268,7 @@ function ImportResult({ result, onClose }) {
 
   const handleDownload = () => {
     const rows = result.generatedPasswords.map((r) => ({
-      Email: r.email,
+      Телефон: r.phone,
       Пароль: r.password,
     }));
     downloadExcel(rows, 'passwords.xlsx');
@@ -272,14 +301,14 @@ function ImportResult({ result, onClose }) {
           <table className={styles.passwordsTable}>
             <thead>
               <tr>
-                <th>Email</th>
+                <th>Телефон</th>
                 <th>Пароль</th>
               </tr>
             </thead>
             <tbody>
               {result.generatedPasswords.map((r) => (
-                <tr key={r.email}>
-                  <td>{r.email}</td>
+                <tr key={r.phone}>
+                  <td>{r.phone}</td>
                   <td className={styles.passwordCell}>{r.password}</td>
                 </tr>
               ))}
@@ -332,6 +361,7 @@ export default function AdminUsersPage() {
         const q = debouncedQuery.trim().toLowerCase();
         return (
           u.fullName?.toLowerCase().includes(q) ||
+          u.phone?.includes(q) ||
           u.email?.toLowerCase().includes(q)
         );
       })
@@ -351,7 +381,7 @@ export default function AdminUsersPage() {
       loadUsers(roleFilter);
       setMode(null);
       if (res.data.generatedPassword) {
-        setPasswordModal({ email: res.data.email, password: res.data.generatedPassword });
+        setPasswordModal({ phone: res.data.phone, password: res.data.generatedPassword });
       }
     } catch (e) {
       showToast(getErrorMessage(e, 'Ошибка при создании пользователя'));
@@ -403,7 +433,7 @@ export default function AdminUsersPage() {
   };
 
   const editInitial = selectedUser
-    ? { name: selectedUser.fullName, email: selectedUser.email, password: '', role: selectedUser.role, isPaid: selectedUser.isPaid || false }
+    ? { name: selectedUser.fullName, phone: selectedUser.phone || '', email: selectedUser.email || '', gradeBook: selectedUser.gradeBook || '', password: '', role: selectedUser.role, isPaid: selectedUser.isPaid || false }
     : null;
 
   return (
@@ -437,7 +467,7 @@ export default function AdminUsersPage() {
           <input
             ref={fileInputRef}
             type="file"
-            accept=".json,.xml"
+            accept=".json,.xml,.xlsx"
             style={{ display: 'none' }}
             onChange={handleImport}
           />
@@ -466,7 +496,7 @@ export default function AdminUsersPage() {
             <input
               className={styles.searchInput}
               type="text"
-              placeholder="Поиск по имени или email..."
+              placeholder="Поиск по имени, телефону или email..."
               value={query}
               onChange={(e) => setQuery(e.target.value)}
             />
@@ -496,7 +526,7 @@ export default function AdminUsersPage() {
                   >
                     {ROLE_LABELS[u.role] || u.role}
                   </span>
-                  <span className={styles.userEmail}>{u.email}</span>
+                  <span className={styles.userEmail}>{u.phone}</span>
                 </div>
               ))}
           </div>

@@ -493,7 +493,7 @@ export default function AdminScholarshipsPage() {
           <input
             ref={fileInputRef}
             type="file"
-            accept=".json,.xml"
+            accept=".json,.xml,.xlsx"
             style={{ display: 'none' }}
             onChange={handleImport}
           />

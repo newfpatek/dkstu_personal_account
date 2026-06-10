@@ -124,7 +124,7 @@ export class MessagesService implements OnModuleInit {
   async getUsers(
     currentUserId: string,
     query?: string,
-  ): Promise<{ id: string; fullName: string; role: string; email: string }[]> {
+  ): Promise<{ id: string; fullName: string; role: string; email: string | null }[]> {
     const qb = this.userRepo
       .createQueryBuilder('u')
       .select(['u.id', 'u.fullName', 'u.role', 'u.email'])

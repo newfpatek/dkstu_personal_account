@@ -39,7 +39,9 @@ export class AdminController {
   // ─── Users ───────────────────────────────────────────────────────────────
 
   @Post('users/import')
-  @UseInterceptors(FileInterceptor('file', { storage: memoryStorage() }))
+  // limits.fileSize: без ограничения memoryStorage может принять файл любого размера
+  // и положить сервер через OOM. 5 МБ хватит для нескольких тысяч записей JSON/XML.
+  @UseInterceptors(FileInterceptor('file', { storage: memoryStorage(), limits: { fileSize: 5 * 1024 * 1024 } }))
   importUsers(@UploadedFile() file: Express.Multer.File) {
     if (!file) return { error: 'Файл не загружен' };
     return this.adminService.importUsers(file.buffer, file.mimetype, file.originalname);
@@ -76,7 +78,7 @@ export class AdminController {
   // ─── Groups ──────────────────────────────────────────────────────────────
 
   @Post('groups/import')
-  @UseInterceptors(FileInterceptor('file', { storage: memoryStorage() }))
+  @UseInterceptors(FileInterceptor('file', { storage: memoryStorage(), limits: { fileSize: 5 * 1024 * 1024 } }))
   importGroup(@UploadedFile() file: Express.Multer.File) {
     if (!file) return { error: 'Файл не загружен' };
     return this.adminService.importGroup(file.buffer, file.mimetype, file.originalname);
@@ -140,7 +142,7 @@ export class AdminController {
   // ─── Group semester disciplines ──────────────────────────────────────────
 
   @Post('group-disciplines/import')
-  @UseInterceptors(FileInterceptor('file', { storage: memoryStorage() }))
+  @UseInterceptors(FileInterceptor('file', { storage: memoryStorage(), limits: { fileSize: 5 * 1024 * 1024 } }))
   importGroupDisciplines(@UploadedFile() file: Express.Multer.File) {
     if (!file) return { error: 'Файл не загружен' };
     return this.adminService.importGroupDisciplines(file.buffer, file.mimetype, file.originalname);
@@ -155,12 +157,10 @@ export class AdminController {
   getGroupSemesterDisciplines(
     @Query('groupId') groupId: string,
     @Query('semester') semester?: string,
-    @Query('academicYear') academicYear?: string,
   ) {
     return this.adminService.getGroupSemesterDisciplines(
       groupId,
       semester ? parseInt(semester, 10) : undefined,
-      academicYear,
     );
   }
 
@@ -172,16 +172,16 @@ export class AdminController {
   // ─── Grades ──────────────────────────────────────────────────────────────
 
   @Post('grades/import')
-  @UseInterceptors(FileInterceptor('file', { storage: memoryStorage() }))
+  @UseInterceptors(FileInterceptor('file', { storage: memoryStorage(), limits: { fileSize: 5 * 1024 * 1024 } }))
   importGrades(@UploadedFile() file: Express.Multer.File) {
     if (!file) return { error: 'Файл не загружен' };
     return this.adminService.importGrades(file.buffer, file.mimetype, file.originalname);
   }
 
   @Post('grades')
-  upsertGrades(@Body() body: { disciplineId: string; semester: number; academicYear: string; grades: Array<{ studentId: string; gradeValue: string | null }> }) {
-    if (!body.disciplineId || !body.semester || !body.academicYear) {
-      throw new BadRequestException('disciplineId, semester, academicYear обязательны');
+  upsertGrades(@Body() body: { disciplineId: string; semester: number; grades: Array<{ studentId: string; gradeValue: string | null }> }) {
+    if (!body.disciplineId || !body.semester) {
+      throw new BadRequestException('disciplineId и semester обязательны');
     }
     return this.adminService.upsertGrades(body);
   }
@@ -191,12 +191,11 @@ export class AdminController {
     @Query('groupId') groupId: string,
     @Query('disciplineId') disciplineId: string,
     @Query('semester') semester: string,
-    @Query('academicYear') academicYear: string,
   ) {
-    if (!groupId || !disciplineId || !semester || !academicYear) {
-      throw new BadRequestException('groupId, disciplineId, semester, academicYear обязательны');
+    if (!groupId || !disciplineId || !semester) {
+      throw new BadRequestException('groupId, disciplineId, semester обязательны');
     }
-    return this.adminService.getGradesForGroup(groupId, disciplineId, parseInt(semester, 10), academicYear);
+    return this.adminService.getGradesForGroup(groupId, disciplineId, parseInt(semester, 10));
   }
 
   @Post('disciplines')
@@ -214,7 +213,7 @@ export class AdminController {
   // ─── Scholarship base amounts & import ───────────────────────────────────
 
   @Post('scholarships/import')
-  @UseInterceptors(FileInterceptor('file', { storage: memoryStorage() }))
+  @UseInterceptors(FileInterceptor('file', { storage: memoryStorage(), limits: { fileSize: 5 * 1024 * 1024 } }))
   importScholarships(@UploadedFile() file: Express.Multer.File) {
     if (!file) return { error: 'Файл не загружен' };
     return this.adminService.importScholarships(file.buffer, file.mimetype, file.originalname);

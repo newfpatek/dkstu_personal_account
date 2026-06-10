@@ -63,7 +63,7 @@ export default function GradesPage() {
 
   const hasPlan = plan && plan.entries && plan.entries.length > 0;
 
-  const years = Object.keys(history).sort().reverse();
+  const semesters = Object.keys(history).map(Number).sort((a, b) => b - a);
 
   if (loading) return <p className={s.empty}>Загрузка...</p>;
   if (loadError) return <p className={s.errorMsg}>Не удалось загрузить данные. Попробуйте обновить страницу.</p>;
@@ -114,7 +114,7 @@ export default function GradesPage() {
           {hasPlan ? (
             <>
               <p style={{ fontSize: 13, color: 'var(--text)', marginBottom: 12 }}>
-                {plan.academicYear} — {plan.semester} семестр
+                {plan.semester} семестр
               </p>
               <table className={s.table}>
                 <thead>
@@ -194,42 +194,34 @@ export default function GradesPage() {
 
       {tab === 'history' && (
         <>
-          {years.length === 0 ? (
+          {semesters.length === 0 ? (
             <p className={s.empty}>История пуста</p>
           ) : (
-            years.map((year) => (
-              <div key={year}>
-                <h3 className={s.historyYear}>{year}</h3>
-                {Object.keys(history[year])
-                  .sort()
-                  .reverse()
-                  .map((sem) => (
-                    <div key={sem}>
-                      <h4 className={s.semesterTitle}>{sem} семестр</h4>
-                      <table className={s.table} style={{ tableLayout: 'fixed' }}>
-                        <colgroup>
-                          <col style={{ width: '72%' }} />
-                          <col style={{ width: '28%' }} />
-                        </colgroup>
-                        <thead>
-                          <tr>
-                            <th>Дисциплина</th>
-                            <th>Оценка</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {history[year][sem].map((g) => (
-                            <tr key={g.id}>
-                              <td data-label="Дисциплина">{g.discipline?.name || '—'}</td>
-                              <td data-label="Оценка">
-                                <GradeCell value={g.gradeValue} />
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  ))}
+            semesters.map((sem) => (
+              <div key={sem}>
+                <h3 className={s.historyYear}>{sem} семестр</h3>
+                <table className={s.table} style={{ tableLayout: 'fixed' }}>
+                  <colgroup>
+                    <col style={{ width: '72%' }} />
+                    <col style={{ width: '28%' }} />
+                  </colgroup>
+                  <thead>
+                    <tr>
+                      <th>Дисциплина</th>
+                      <th>Оценка</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {history[sem].map((g) => (
+                      <tr key={g.id}>
+                        <td data-label="Дисциплина">{g.discipline?.name || '—'}</td>
+                        <td data-label="Оценка">
+                          <GradeCell value={g.gradeValue} />
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
             ))
           )}
@@ -254,7 +246,7 @@ export default function GradesPage() {
                 <tr key={g.id}>
                   <td data-label="Дисциплина">{g.discipline?.name || '—'}</td>
                   <td data-label="Период" style={{ color: 'var(--text)', fontSize: 13 }}>
-                    {g.academicYear}, {g.semester} сем.
+                    {g.semester} сем.
                   </td>
                   <td data-label="Оценка">
                     <GradeCell value={g.gradeValue} />

@@ -226,7 +226,6 @@ function GroupDisciplinesPanel({ groupId }) {
   const [allDisciplines, setAllDisciplines] = useState([]);
   const [planEntries, setPlanEntries] = useState([]);
   const [semester, setSemester] = useState('');
-  const [academicYear, setAcademicYear] = useState('');
   const [selected, setSelected] = useState([]); // [{id, name, disciplineType}]
   const [searchQuery, setSearchQuery] = useState('');
   const [searchOpen, setSearchOpen] = useState(false);
@@ -250,11 +249,10 @@ function GroupDisciplinesPanel({ groupId }) {
     loadPlan();
   }, [groupId]);
 
-  // Подставляем семестр/год из существующего плана при первой загрузке
+  // Подставляем семестр из существующего плана при первой загрузке
   useEffect(() => {
-    if (planEntries.length > 0 && !semester && !academicYear) {
+    if (planEntries.length > 0 && !semester) {
       setSemester(String(planEntries[0].semester));
-      setAcademicYear(planEntries[0].academicYear);
     }
   }, [planEntries]);
 
@@ -281,14 +279,13 @@ function GroupDisciplinesPanel({ groupId }) {
   };
 
   const handleAssign = async () => {
-    if (!selected.length || !semester || !academicYear) return;
+    if (!selected.length || !semester) return;
     setSaving(true);
     try {
       await assignGroupDisciplines({
         groupId,
         disciplineIds: selected.map((d) => d.id),
         semester: Number(semester),
-        academicYear,
       });
       setSelected([]);
       await loadPlan();
@@ -340,9 +337,8 @@ function GroupDisciplinesPanel({ groupId }) {
     }
   };
 
-  // Текущий назначенный семестр (один активный)
   const activeSemesterLabel = planEntries.length > 0
-    ? `${planEntries[0].academicYear} — ${planEntries[0].semester} семестр`
+    ? `${planEntries[0].semester} семестр`
     : null;
 
   return (
@@ -375,15 +371,6 @@ function GroupDisciplinesPanel({ groupId }) {
               value={semester}
               onChange={(e) => setSemester(e.target.value)}
               placeholder="1"
-            />
-          </div>
-          <div className={styles.formRow} style={{ flex: '0 0 140px' }}>
-            <label className={styles.label}>Учебный год</label>
-            <input
-              className={styles.input}
-              value={academicYear}
-              onChange={(e) => setAcademicYear(e.target.value)}
-              placeholder="2025-2026"
             />
           </div>
         </div>
@@ -462,14 +449,14 @@ function GroupDisciplinesPanel({ groupId }) {
           <button
             className={styles.btnPrimary}
             onClick={handleAssign}
-            disabled={saving || !selected.length || !semester || !academicYear}
+            disabled={saving || !selected.length || !semester}
           >
             {saving ? 'Сохранение...' : `Добавить выбранные (${selected.length})`}
           </button>
           <input
             ref={importRef}
             type="file"
-            accept=".json,.xml"
+            accept=".json,.xml,.xlsx"
             style={{ display: 'none' }}
             onChange={handleImport}
           />
@@ -775,7 +762,7 @@ export default function AdminGroupsPage() {
   };
 
   const downloadExcel = (groupName, rows) => {
-    const data = rows.map((r) => ({ Группа: groupName || '', Email: r.email, Пароль: r.password }));
+    const data = rows.map((r) => ({ Группа: groupName || '', Телефон: r.phone, Пароль: r.password }));
     const ws = XLSX.utils.json_to_sheet(data);
     ws['!cols'] = [{ wch: 20 }, { wch: 30 }, { wch: 18 }];
     const wb = XLSX.utils.book_new();
@@ -806,7 +793,7 @@ export default function AdminGroupsPage() {
           <input
             ref={importFileRef}
             type="file"
-            accept=".json,.xml"
+            accept=".json,.xml,.xlsx"
             style={{ display: 'none' }}
             onChange={handleImport}
           />
@@ -826,50 +813,60 @@ export default function AdminGroupsPage() {
         </div>
       </div>
 
-      {importResult && importResult.ok && (
-        <div className={styles.importSuccess}>
-          <div className={styles.importSummary}>
-            <span>
-              Группа <strong>{importResult.data.group?.name}</strong> создана.
-              {' '}Добавлено участников: <b>{importResult.data.added}</b>.
-              {importResult.data.created > 0 && <> Создано новых: <b>{importResult.data.created}</b>.</>}
-              {importResult.data.skipped > 0 && <> Пропущено: <b>{importResult.data.skipped}</b>.</>}
-            </span>
-            <button className={styles.importClose} onClick={() => setImportResult(null)}>✕</button>
-          </div>
-          {importResult.data.errors?.length > 0 && (
-            <ul className={styles.importErrors}>
-              {importResult.data.errors.map((e, i) => <li key={i}>{e}</li>)}
-            </ul>
-          )}
-          {importResult.data.generatedPasswords?.length > 0 && (
-            <div className={styles.passwordsBlock}>
-              <div className={styles.passwordsHeader}>
-                <span>Сгенерированные пароли для новых пользователей</span>
-                <button
-                  className={styles.btnDownload}
-                  onClick={() => downloadExcel(importResult.data.group?.name, importResult.data.generatedPasswords)}
-                >
-                  Скачать Excel
-                </button>
-              </div>
-              <table className={styles.passwordsTable}>
-                <thead>
-                  <tr><th>Email</th><th>Пароль</th></tr>
-                </thead>
-                <tbody>
-                  {importResult.data.generatedPasswords.map((r) => (
-                    <tr key={r.email}>
-                      <td>{r.email}</td>
-                      <td className={styles.passwordCell}>{r.password}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+      {importResult && importResult.ok && (() => {
+        const d = importResult.data;
+        // Excel multi-group format returns d.groups[]; JSON/XML returns d.group
+        const isMulti = Array.isArray(d.groups);
+        const added = isMulti ? d.usersAdded : d.added;
+        const created = isMulti ? d.usersCreated : d.created;
+        const label = isMulti
+          ? d.groups.map((g) => `${g.name}${g.isNew ? ' (создана)' : ''}`).join(', ')
+          : d.group?.name;
+        return (
+          <div className={styles.importSuccess}>
+            <div className={styles.importSummary}>
+              <span>
+                {isMulti ? 'Группы: ' : 'Группа: '}<strong>{label}</strong>.
+                {' '}Добавлено: <b>{added}</b>.
+                {created > 0 && <> Создано пользователей: <b>{created}</b>.</>}
+                {d.skipped > 0 && <> Пропущено: <b>{d.skipped}</b>.</>}
+              </span>
+              <button className={styles.importClose} onClick={() => setImportResult(null)}>✕</button>
             </div>
-          )}
-        </div>
-      )}
+            {d.errors?.length > 0 && (
+              <ul className={styles.importErrors}>
+                {d.errors.map((e, i) => <li key={i}>{e}</li>)}
+              </ul>
+            )}
+            {d.generatedPasswords?.length > 0 && (
+              <div className={styles.passwordsBlock}>
+                <div className={styles.passwordsHeader}>
+                  <span>Сгенерированные пароли для новых пользователей</span>
+                  <button
+                    className={styles.btnDownload}
+                    onClick={() => downloadExcel(label, d.generatedPasswords)}
+                  >
+                    Скачать Excel
+                  </button>
+                </div>
+                <table className={styles.passwordsTable}>
+                  <thead>
+                    <tr><th>Телефон</th><th>Пароль</th></tr>
+                  </thead>
+                  <tbody>
+                    {d.generatedPasswords.map((r) => (
+                      <tr key={r.phone}>
+                        <td>{r.phone}</td>
+                        <td className={styles.passwordCell}>{r.password}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        );
+      })()}
       {importResult && !importResult.ok && (
         <div className={styles.importError}>
           <div className={styles.importSummary}>

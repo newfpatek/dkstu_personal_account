@@ -23,6 +23,23 @@ docker compose down
 // выход
 \q
 
+// 3. Создание первого пользователя
+cd dkstu_personal_account_backend
+node -e "const bcrypt = require('bcrypt'); bcrypt.hash('твой_пароль', 12).then(h => console.log(h));" // установка пароля и получение хеша пароля
+
+INSERT INTO users (id, name, phone, email, password_hash, role, is_paid, created_at)
+VALUES (
+  gen_random_uuid(),
+  '(ФИО админа)',
+  '(номер телефона)',
+  '(email)',
+  '(хеш пароля)',
+  'admin',
+  false,
+  NOW()
+);"
+
+
 // Тест авторизации
 
 Студент: email: student_test@test.ru, password: 123456;

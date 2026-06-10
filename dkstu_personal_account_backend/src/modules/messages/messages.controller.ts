@@ -1,6 +1,6 @@
 import {
   Controller, Post, Get, Patch, Body, Request, Param, Query,
-  UseGuards, HttpCode, HttpStatus,
+  UseGuards, HttpCode, HttpStatus, ParseUUIDPipe,
 } from '@nestjs/common';
 import { MessagesService } from './messages.service';
 import { SendMessageDto } from './dto/send-message.dto';
@@ -64,7 +64,9 @@ export class MessagesController {
   @Patch(':id/status')
   setStatus(
     @Request() req: any,
-    @Param('id') messageId: string,
+    // ParseUUIDPipe: без него PostgreSQL бросает 500 при невалидном UUID вместо 400.
+    // Это утечка деталей реализации и лишняя нагрузка на БД.
+    @Param('id', ParseUUIDPipe) messageId: string,
     @Body() dto: SetMessageStatusDto,
   ) {
     return this.messagesService.setMessageRelevance(req.user.id, messageId, dto.isRelevant);

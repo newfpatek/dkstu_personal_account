@@ -6,7 +6,7 @@ import styles from './LoginPage.module.css';
 
 export default function LoginPage() {
   const navigate = useNavigate();
-  const [email, setEmail] = useState('');
+  const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -17,7 +17,7 @@ export default function LoginPage() {
     setLoading(true);
 
     try {
-      const response = await loginRequest(email, password);
+      const response = await loginRequest(phone, password);
       const { access_token, user } = response.data;
 
       localStorage.setItem('access_token', access_token);
@@ -50,24 +50,25 @@ export default function LoginPage() {
 
         <form className={styles.form} onSubmit={handleLogin}>
           <div className={styles.field}>
-            <label className={styles.label}>Email</label>
+            {/* tel тип не используем — он добавляет лишние стили на мобильных браузерах.
+                Паттерн E.164: +71234567890 (страна+номер, только цифры после +) */}
             <input
               className={styles.input}
-              type="email"
-              placeholder="example@kgtu.ru"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              autoComplete="email"
+              type="tel"
+              placeholder="Введите номер телефона..."
+              value={phone}
+              onChange={(e) => setPhone(e.target.value)}
+              autoComplete="tel"
               required
             />
           </div>
 
           <div className={styles.field}>
-            <label className={styles.label}>Пароль</label>
+            {/* <label className={styles.label}>Пароль</label> */}
             <input
               className={styles.input}
               type="password"
-              placeholder="••••••••"
+              placeholder="Введите пароль..."
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               autoComplete="current-password"

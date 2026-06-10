@@ -40,7 +40,6 @@ export default function AdminGradesPage() {
   const [discOpen, setDiscOpen] = useState(false);
   const [selectedDisc, setSelectedDisc] = useState(null);
   const [semester, setSemester] = useState('');
-  const [academicYear, setAcademicYear] = useState('');
 
   const [students, setStudents] = useState([]);
   const [localGrades, setLocalGrades] = useState({});
@@ -75,12 +74,12 @@ export default function AdminGradesPage() {
     ? allDisciplines.filter((d) => d.name.toLowerCase().includes(discQuery.trim().toLowerCase())).slice(0, 8)
     : [];
 
-  const loadGrades = async (gId, dId, sem, year) => {
-    if (!gId || !dId || !sem || !year) return;
+  const loadGrades = async (gId, dId, sem) => {
+    if (!gId || !dId || !sem) return;
     setGradesLoading(true);
     setSaveResult(null);
     try {
-      const res = await getGroupGrades(gId, dId, sem, year);
+      const res = await getGroupGrades(gId, dId, sem);
       setStudents(res.data);
       const map = {};
       res.data.forEach((st) => { map[st.studentId] = st.gradeValue || ''; });
@@ -93,16 +92,16 @@ export default function AdminGradesPage() {
   };
 
   useEffect(() => {
-    if (selectedGroup && selectedDisc && semester && academicYear) {
-      loadGrades(selectedGroup.id, selectedDisc.id, semester, academicYear);
+    if (selectedGroup && selectedDisc && semester) {
+      loadGrades(selectedGroup.id, selectedDisc.id, semester);
     } else {
       setStudents([]);
       setLocalGrades({});
     }
-  }, [selectedGroup?.id, selectedDisc?.id, semester, academicYear]);
+  }, [selectedGroup?.id, selectedDisc?.id, semester]);
 
   const handleSave = async () => {
-    if (!selectedDisc || !semester || !academicYear) return;
+    if (!selectedDisc || !semester) return;
     setSaving(true);
     setSaveResult(null);
     try {
@@ -113,7 +112,6 @@ export default function AdminGradesPage() {
       const res = await upsertGrades({
         disciplineId: selectedDisc.id,
         semester: Number(semester),
-        academicYear,
         grades,
       });
       setSaveResult({ ok: true, ...res.data });
@@ -133,8 +131,8 @@ export default function AdminGradesPage() {
     try {
       const res = await importGradesApi(file);
       setImportResult({ ok: true, data: res.data });
-      if (selectedGroup && selectedDisc && semester && academicYear) {
-        await loadGrades(selectedGroup.id, selectedDisc.id, semester, academicYear);
+      if (selectedGroup && selectedDisc && semester) {
+        await loadGrades(selectedGroup.id, selectedDisc.id, semester);
       }
     } catch (err) {
       setImportResult({ ok: false, message: err.response?.data?.message || 'Ошибка импорта' });
@@ -144,7 +142,7 @@ export default function AdminGradesPage() {
   };
 
   const gradeOptions = selectedDisc?.disciplineType === 'pass_fail' ? PASS_FAIL_GRADES : EXAM_GRADES;
-  const canLoad = !!(selectedGroup && selectedDisc && semester && academicYear);
+  const canLoad = !!(selectedGroup && selectedDisc && semester);
 
   return (
     <div>
@@ -154,7 +152,7 @@ export default function AdminGradesPage() {
           <input
             ref={importRef}
             type="file"
-            accept=".json,.xml"
+            accept=".json,.xml,.xlsx"
             style={{ display: 'none' }}
             onChange={handleImport}
           />
@@ -292,21 +290,11 @@ export default function AdminGradesPage() {
                     onChange={(e) => setSemester(e.target.value)}
                   />
                 </div>
-
-                <div className={styles.formRow} style={{ flex: '0 0 140px' }}>
-                  <label className={styles.label}>Учебный год</label>
-                  <input
-                    className={styles.input}
-                    placeholder="2025-2026"
-                    value={academicYear}
-                    onChange={(e) => setAcademicYear(e.target.value)}
-                  />
-                </div>
               </div>
 
               {/* Students table */}
               {!canLoad && (
-                <p className={s.empty}>Выберите дисциплину, семестр и учебный год</p>
+                <p className={s.empty}>Выберите дисциплину и семестр</p>
               )}
 
               {canLoad && gradesLoading && <p className={s.empty}>Загрузка оценок...</p>}
@@ -333,7 +321,11 @@ export default function AdminGradesPage() {
                           </td>
                           <td data-label="Студент">
                             <div style={{ fontWeight: 500 }}>{st.fullName}</div>
-                            <div style={{ fontSize: 12, color: 'var(--text)', opacity: 0.6 }}>{st.email}</div>
+                            {st.gradeBook && (
+                              <div style={{ fontSize: 12, color: 'var(--text)', opacity: 0.6 }}>
+                                Зач. кн. {st.gradeBook}
+                              </div>
+                            )}
                           </td>
                           <td data-label="Оценка">
                             <select

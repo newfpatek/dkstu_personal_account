@@ -43,24 +43,18 @@ export class StudentsService {
     private groupSemDisciplineRepo: Repository<GroupSemesterDiscipline>,
   ) {}
 
-  async getGrades(
-    studentId: string,
-    semester?: number,
-    academicYear?: string,
-  ) {
+  async getGrades(studentId: string, semester?: number) {
     const qb = this.gradeRepo
       .createQueryBuilder('gr')
       .leftJoinAndSelect('gr.discipline', 'discipline')
       .where('gr.studentId = :studentId', { studentId });
 
     if (semester) qb.andWhere('gr.semester = :semester', { semester });
-    if (academicYear)
-      qb.andWhere('gr.academicYear = :academicYear', { academicYear });
 
     return qb.orderBy('discipline.name', 'ASC').getMany();
   }
 
-  async getCurrentSemesterPlan(studentId: string, semester?: number, academicYear?: string) {
+  async getCurrentSemesterPlan(studentId: string, semester?: number) {
     const user = await this.userRepo
       .createQueryBuilder('u')
       .leftJoinAndSelect('u.groups', 'g')
@@ -68,7 +62,7 @@ export class StudentsService {
       .getOne();
 
     const groupIds = (user?.groups ?? []).map((g) => g.id);
-    if (!groupIds.length) return { semester: null, academicYear: null, entries: [] };
+    if (!groupIds.length) return { semester: null, entries: [] };
 
     const qb = this.groupSemDisciplineRepo
       .createQueryBuilder('gsd')
@@ -76,24 +70,22 @@ export class StudentsService {
       .where('gsd.groupId IN (:...groupIds)', { groupIds });
 
     if (semester !== undefined) qb.andWhere('gsd.semester = :semester', { semester });
-    if (academicYear) qb.andWhere('gsd.academicYear = :academicYear', { academicYear });
-
-    qb.orderBy('gsd.academicYear', 'DESC').addOrderBy('gsd.semester', 'DESC');
+    qb.orderBy('gsd.semester', 'DESC');
 
     const all = await qb.getMany();
-    if (!all.length) return { semester: null, academicYear: null, entries: [] };
+    if (!all.length) return { semester: null, entries: [] };
 
-    // Если семестр/год не указан — берём самую последнюю запись
     const targetSemester = semester ?? all[0].semester;
-    const targetYear = academicYear ?? all[0].academicYear;
-    const planned = all.filter((p) => p.semester === targetSemester && p.academicYear === targetYear);
+    const planned = all.filter((p) => p.semester === targetSemester);
 
-    // Подтягиваем реальные оценки для этого студента/семестра/года
     const grades = await this.gradeRepo.find({
-      where: { studentId, semester: targetSemester, academicYear: targetYear },
+      where: { studentId, semester: targetSemester },
       relations: { discipline: true },
     });
-    const gradeMap = new Map(grades.map((g) => [g.disciplineId, g]));
+    const gradeMap = new Map<string, GradeRecord>();
+    for (const g of grades) {
+      if (!gradeMap.has(g.disciplineId)) gradeMap.set(g.disciplineId, g);
+    }
 
     const entries = planned.map((p) => {
       const grade = gradeMap.get(p.disciplineId);
@@ -106,23 +98,21 @@ export class StudentsService {
       };
     }).sort((a, b) => a.discipline.name.localeCompare(b.discipline.name, 'ru'));
 
-    return { semester: targetSemester, academicYear: targetYear, entries };
+    return { semester: targetSemester, entries };
   }
 
   async getGradesHistory(studentId: string) {
     const records = await this.gradeRepo.find({
       where: { studentId },
       relations: { discipline: true },
-      order: { academicYear: 'DESC' },
+      order: { semester: 'DESC' },
     });
 
-    // Group by academicYear → semester → records[]
-    const grouped: Record<string, Record<number, GradeRecord[]>> = {};
+    // Group by semester → records[]
+    const grouped: Record<number, GradeRecord[]> = {};
     for (const record of records) {
-      if (!grouped[record.academicYear]) grouped[record.academicYear] = {};
-      if (!grouped[record.academicYear][record.semester])
-        grouped[record.academicYear][record.semester] = [];
-      grouped[record.academicYear][record.semester].push(record);
+      if (!grouped[record.semester]) grouped[record.semester] = [];
+      grouped[record.semester].push(record);
     }
     return grouped;
   }
@@ -148,7 +138,6 @@ export class StudentsService {
   }
 
   private isLaterSemester(a: GradeRecord, b: GradeRecord): boolean {
-    if (a.academicYear !== b.academicYear) return a.academicYear > b.academicYear;
     return a.semester > b.semester;
   }
 
@@ -167,7 +156,7 @@ export class StudentsService {
     return this.gradeRepo.find({
       where: { studentId, isDebt: true },
       relations: { discipline: true },
-      order: { academicYear: 'DESC' },
+      order: { semester: 'DESC' },
     });
   }
 

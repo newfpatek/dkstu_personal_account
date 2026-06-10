@@ -40,18 +40,25 @@ export class CreateFullSchema1779349780200 implements MigrationInterface {
     `);
 
     // --- Таблица users ---
+    // phone — основной идентификатор для входа (E.164: +71234567890).
+    // Телефон обязателен при поступлении; email — нет, поэтому email nullable.
+    // UNIQUE на phone: в PostgreSQL несколько NULL в UNIQUE-колонке разрешены.
     await queryRunner.query(`
       CREATE TABLE IF NOT EXISTS "users" (
-        "id"            UUID         NOT NULL DEFAULT gen_random_uuid(),
-        "name"          VARCHAR(255) NOT NULL,
-        "email"         VARCHAR(255) NOT NULL,
+        "id"           UUID         NOT NULL DEFAULT gen_random_uuid(),
+        "name"         VARCHAR(255) NOT NULL,
+        "phone"        VARCHAR(20)  NOT NULL UNIQUE,
+        "email"        VARCHAR(255),
+        "grade_book"   VARCHAR(50),
         "password_hash" VARCHAR(255) NOT NULL,
-        "role"          VARCHAR(20)  NOT NULL,
-        "is_paid"       BOOLEAN      NOT NULL DEFAULT false,
-        "created_at"    TIMESTAMP    DEFAULT now(),
-        CONSTRAINT "users_pkey"       PRIMARY KEY ("id"),
-        CONSTRAINT "users_email_key"  UNIQUE ("email"),
-        CONSTRAINT "users_role_check" CHECK (role = ANY (ARRAY['student','teacher','staff','admin']))
+        "role"         VARCHAR(20)  NOT NULL,
+        "is_paid"      BOOLEAN      NOT NULL DEFAULT false,
+        "created_at"   TIMESTAMP    DEFAULT now(),
+        CONSTRAINT "users_pkey"                  PRIMARY KEY ("id"),
+        CONSTRAINT "users_email_key"             UNIQUE ("email"),
+        CONSTRAINT "users_grade_book_key"        UNIQUE ("grade_book"),
+        CONSTRAINT "users_role_check"            CHECK (role = ANY (ARRAY['student','teacher','staff','admin'])),
+        CONSTRAINT "users_student_grade_book"    CHECK (role != 'student' OR grade_book IS NOT NULL)
       )
     `);
 
@@ -97,18 +104,18 @@ export class CreateFullSchema1779349780200 implements MigrationInterface {
         "student_id"    UUID        NOT NULL,
         "discipline_id" UUID        NOT NULL,
         "semester"      INTEGER     NOT NULL,
-        "academic_year" VARCHAR(9)  NOT NULL DEFAULT '2024-2025',
         "grade_value"   grade_value NOT NULL,
         "is_debt"       BOOLEAN     NOT NULL DEFAULT false,
         "updated_at"    TIMESTAMP   DEFAULT now(),
-        CONSTRAINT "grade_records_pkey"           PRIMARY KEY ("id"),
-        CONSTRAINT "grade_records_student_id_fkey"    FOREIGN KEY ("student_id")    REFERENCES "users"("id")       ON DELETE CASCADE,
+        CONSTRAINT "grade_records_pkey"              PRIMARY KEY ("id"),
+        CONSTRAINT "uq_grade_record"                 UNIQUE ("student_id", "discipline_id", "semester"),
+        CONSTRAINT "grade_records_student_id_fkey"   FOREIGN KEY ("student_id")    REFERENCES "users"("id")       ON DELETE CASCADE,
         CONSTRAINT "grade_records_discipline_id_fkey" FOREIGN KEY ("discipline_id") REFERENCES "disciplines"("id")
       )
     `);
 
     await queryRunner.query(`
-      CREATE INDEX IF NOT EXISTS "idx_grades_student_year" ON "grade_records" ("student_id", "academic_year")
+      CREATE INDEX IF NOT EXISTS "idx_grades_student" ON "grade_records" ("student_id")
     `);
 
     // Триггерная функция: автоматически выставляет is_debt

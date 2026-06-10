@@ -50,12 +50,10 @@ export class StudentsController {
   getMyCurrentSemesterPlan(
     @Request() req,
     @Query('semester') semester?: string,
-    @Query('academicYear') academicYear?: string,
   ) {
     return this.studentsService.getCurrentSemesterPlan(
       req.user.id,
       semester ? parseInt(semester, 10) : undefined,
-      academicYear,
     );
   }
 
@@ -70,12 +68,10 @@ export class StudentsController {
   getMyGrades(
     @Request() req,
     @Query('semester') semester?: string,
-    @Query('academicYear') academicYear?: string,
   ) {
     return this.studentsService.getGrades(
       req.user.id,
       semester ? parseInt(semester, 10) : undefined,
-      academicYear,
     );
   }
 
@@ -223,12 +219,10 @@ export class StudentsController {
   getStudentGrades(
     @Param('id') id: string,
     @Query('semester') semester?: string,
-    @Query('academicYear') academicYear?: string,
   ) {
     return this.studentsService.getGrades(
       id,
       semester ? parseInt(semester, 10) : undefined,
-      academicYear,
     );
   }
 

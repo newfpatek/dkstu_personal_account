@@ -19,9 +19,6 @@ export class GradeRecord {
   @Column()
   semester!: number;
 
-  @Column({ name: 'academic_year', length: 9, default: '2024-2025' })
-  academicYear!: string;
-
   @Column({ name: 'grade_value', type: 'enum', enum: GradeValue })
   gradeValue!: GradeValue;
 
