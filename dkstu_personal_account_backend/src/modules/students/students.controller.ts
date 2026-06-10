@@ -108,19 +108,6 @@ export class StudentsController {
 
   // ── Student: portfolio ───────────────────────────────────────────────────
 
-  // download должен быть объявлен ДО me/portfolio чтобы NestJS не перепутал маршруты
-  @Roles(Role.STUDENT)
-  @Get('me/portfolio/download')
-  downloadMyPortfolio(
-    @Request() req,
-    @Res() res: Response,
-    @Query('category') category?: PortfolioCategory,
-    @Query('dateFrom') dateFrom?: string,
-    @Query('dateTo') dateTo?: string,
-  ) {
-    return this.studentsService.downloadPortfolio(req.user.id, res, category, dateFrom, dateTo);
-  }
-
   @Roles(Role.STUDENT)
   @Get('me/portfolio/:id/file')
   serveMyPortfolioFile(

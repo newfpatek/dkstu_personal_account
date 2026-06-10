@@ -1,0 +1,32 @@
+{
+  "name": "ЭБ-124",
+  "year": 2024,
+  "members": [
+    {
+      "email": "ivanov.ivan@kstu.ru",
+      "name": "Иванов Иван Иванович"
+    },
+    {
+      "email": "petrova.anna@kstu.ru",
+      "name": "Петрова Анна Сергеевна"
+    },
+    {
+      "email": "sidorov.alex@kstu.ru",
+      "name": "Сидоров Алексей Николаевич"
+    },
+    {
+      "email": "kozlova.maria@kstu.ru",
+      "name": "Козлова Мария Дмитриевна",
+      "role": "student",
+      "isPaid": true
+    },
+    {
+      "email": "morozov.dmitry@kstu.ru",
+      "name": "Морозов Дмитрий Андреевич"
+    },
+    {
+      "email": "smirnova.elena@kstu.ru"
+    }
+  ]
+  
+}

@@ -67,6 +67,21 @@ export const importGroupDisciplines = (file) => {
 
 export const getDisciplines = () => api.get('/admin/disciplines');
 
+export const createDiscipline = (name, type) =>
+  api.post('/admin/disciplines', { name, type });
+
+// Grades
+export const getGroupGrades = (groupId, disciplineId, semester, academicYear) =>
+  api.get('/admin/grades', { params: { groupId, disciplineId, semester, academicYear } });
+
+export const upsertGrades = (data) => api.post('/admin/grades', data);
+
+export const importGrades = (file) => {
+  const form = new FormData();
+  form.append('file', file);
+  return api.post('/admin/grades/import', form);
+};
+
 // Scholarship import
 export const importScholarships = (file) => {
   const form = new FormData();

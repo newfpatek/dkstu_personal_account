@@ -8,6 +8,7 @@ import AdminPage from './pages/AdminPage';
 import AdminUsersPage from './pages/admin/AdminUsersPage';
 import AdminGroupsPage from './pages/admin/AdminGroupsPage';
 import AdminScholarshipsPage from './pages/admin/AdminScholarshipsPage';
+import AdminGradesPage from './pages/admin/AdminGradesPage';
 import GradesPage from './pages/student/GradesPage';
 import ScholarshipPage from './pages/student/ScholarshipPage';
 import PortfolioPage from './pages/student/PortfolioPage';
@@ -78,6 +79,7 @@ export default function App() {
           <Route index element={<Navigate to="users" replace />} />
           <Route path="users" element={<AdminUsersPage />} />
           <Route path="groups" element={<AdminGroupsPage />} />
+          <Route path="grades" element={<AdminGradesPage />} />
           <Route path="scholarships" element={<AdminScholarshipsPage />} />
           <Route path="messages" element={<MessagesPage />} />
         </Route>

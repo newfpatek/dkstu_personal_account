@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import * as XLSX from 'xlsx';
 import {
   getGroups,
   createGroup,
@@ -10,6 +11,7 @@ import {
   getUsers,
   importGroup,
   getDisciplines,
+  createDiscipline as createDisciplineApi,
   getGroupSemesterDisciplines,
   assignGroupDisciplines,
   removeGroupSemesterDiscipline,
@@ -52,7 +54,7 @@ function CreateGroupForm({ onSave, onCancel, loading, error }) {
           value={name}
           onChange={(e) => setName(e.target.value)}
           required
-          placeholder="ИВТ-21-1"
+          placeholder="И-122"
         />
       </div>
       <div className={styles.formRow}>
@@ -318,11 +320,23 @@ function GroupDisciplinesPanel({ groupId }) {
     try {
       const res = await importGroupDisciplines(file);
       setImportResult({ ok: true, data: res.data });
-      await loadPlan();
+      const [, discRes] = await Promise.all([loadPlan(), getDisciplines()]);
+      setAllDisciplines(discRes.data);
     } catch (err) {
       setImportResult({ ok: false, message: err.response?.data?.message || 'Ошибка импорта' });
     } finally {
       setImportLoading(false);
+    }
+  };
+
+  const handleCreateDiscipline = async (name, type) => {
+    try {
+      const res = await createDisciplineApi(name, type);
+      const newDisc = res.data;
+      setAllDisciplines((prev) => [...prev, newDisc].sort((a, b) => a.name.localeCompare(b.name, 'ru')));
+      handleSelectDiscipline(newDisc);
+    } catch (err) {
+      showToast(getErrorMessage(err, 'Ошибка при создании дисциплины'));
     }
   };
 
@@ -384,7 +398,7 @@ function GroupDisciplinesPanel({ groupId }) {
             onFocus={() => setSearchOpen(true)}
             onBlur={() => setTimeout(() => setSearchOpen(false), 150)}
           />
-          {searchOpen && searchResults.length > 0 && (
+          {searchOpen && searchQuery.trim().length >= 1 && (
             <div className={styles.searchResults} style={{ position: 'absolute', zIndex: 10, width: '100%', top: '100%' }}>
               {searchResults.map((d) => (
                 <div
@@ -399,6 +413,26 @@ function GroupDisciplinesPanel({ groupId }) {
                   </span>
                 </div>
               ))}
+              {searchResults.length === 0 && (
+                <>
+                  <div
+                    className={styles.searchResultItem}
+                    onMouseDown={() => handleCreateDiscipline(searchQuery.trim(), 'exam')}
+                    style={{ cursor: 'pointer' }}
+                  >
+                    <span className={styles.searchName}>➕ Создать «{searchQuery.trim()}»</span>
+                    <span className={styles.searchEmail}>Экзамен</span>
+                  </div>
+                  <div
+                    className={styles.searchResultItem}
+                    onMouseDown={() => handleCreateDiscipline(searchQuery.trim(), 'pass_fail')}
+                    style={{ cursor: 'pointer' }}
+                  >
+                    <span className={styles.searchName}>➕ Создать «{searchQuery.trim()}»</span>
+                    <span className={styles.searchEmail}>Зачёт</span>
+                  </div>
+                </>
+              )}
             </div>
           )}
         </div>
@@ -409,6 +443,9 @@ function GroupDisciplinesPanel({ groupId }) {
             {selected.map((d) => (
               <span key={d.id} className={styles.chip}>
                 {d.name}
+                <span className={styles.chipType}>
+                  {d.disciplineType === 'exam' ? 'Экзамен' : 'Зачёт'}
+                </span>
                 <button
                   className={styles.chipRemove}
                   onClick={() => handleRemoveSelected(d.id)}
@@ -737,9 +774,27 @@ export default function AdminGroupsPage() {
     }
   };
 
-  const filteredGroups = query.trim()
-    ? groups.filter((g) => g.name.toLowerCase().includes(query.trim().toLowerCase()))
-    : groups;
+  const downloadExcel = (groupName, rows) => {
+    const data = rows.map((r) => ({ Группа: groupName || '', Email: r.email, Пароль: r.password }));
+    const ws = XLSX.utils.json_to_sheet(data);
+    ws['!cols'] = [{ wch: 20 }, { wch: 30 }, { wch: 18 }];
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Пароли');
+    XLSX.writeFile(wb, `passwords_${groupName || 'group'}.xlsx`);
+  };
+
+  const [debouncedQuery, setDebouncedQuery] = useState('');
+  const queryDebounceRef = useRef(null);
+
+  useEffect(() => {
+    if (queryDebounceRef.current) clearTimeout(queryDebounceRef.current);
+    queryDebounceRef.current = setTimeout(() => setDebouncedQuery(query), 1000);
+    return () => clearTimeout(queryDebounceRef.current);
+  }, [query]);
+
+  const filteredGroups = debouncedQuery.trim()
+    ? groups.filter((g) => g.name.toLowerCase().includes(debouncedQuery.trim().toLowerCase()))
+    : [];
 
   return (
     <div>
@@ -773,19 +828,55 @@ export default function AdminGroupsPage() {
 
       {importResult && importResult.ok && (
         <div className={styles.importSuccess}>
-          Группа <strong>{importResult.data.group?.name}</strong> создана.
-          {' '}Добавлено участников: {importResult.data.added}.
-          {importResult.data.created > 0 && ` Создано новых пользователей: ${importResult.data.created}.`}
-          {importResult.data.skipped > 0 && ` Пропущено: ${importResult.data.skipped}.`}
+          <div className={styles.importSummary}>
+            <span>
+              Группа <strong>{importResult.data.group?.name}</strong> создана.
+              {' '}Добавлено участников: <b>{importResult.data.added}</b>.
+              {importResult.data.created > 0 && <> Создано новых: <b>{importResult.data.created}</b>.</>}
+              {importResult.data.skipped > 0 && <> Пропущено: <b>{importResult.data.skipped}</b>.</>}
+            </span>
+            <button className={styles.importClose} onClick={() => setImportResult(null)}>✕</button>
+          </div>
           {importResult.data.errors?.length > 0 && (
-            <ul style={{ margin: '6px 0 0', paddingLeft: 18, fontSize: 13 }}>
+            <ul className={styles.importErrors}>
               {importResult.data.errors.map((e, i) => <li key={i}>{e}</li>)}
             </ul>
+          )}
+          {importResult.data.generatedPasswords?.length > 0 && (
+            <div className={styles.passwordsBlock}>
+              <div className={styles.passwordsHeader}>
+                <span>Сгенерированные пароли для новых пользователей</span>
+                <button
+                  className={styles.btnDownload}
+                  onClick={() => downloadExcel(importResult.data.group?.name, importResult.data.generatedPasswords)}
+                >
+                  Скачать Excel
+                </button>
+              </div>
+              <table className={styles.passwordsTable}>
+                <thead>
+                  <tr><th>Email</th><th>Пароль</th></tr>
+                </thead>
+                <tbody>
+                  {importResult.data.generatedPasswords.map((r) => (
+                    <tr key={r.email}>
+                      <td>{r.email}</td>
+                      <td className={styles.passwordCell}>{r.password}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           )}
         </div>
       )}
       {importResult && !importResult.ok && (
-        <div className={styles.importError}>{importResult.message}</div>
+        <div className={styles.importError}>
+          <div className={styles.importSummary}>
+            <span>{importResult.message}</span>
+            <button className={styles.importClose} onClick={() => setImportResult(null)}>✕</button>
+          </div>
+        </div>
       )}
 
       <div className={styles.splitLayout}>
@@ -802,7 +893,10 @@ export default function AdminGroupsPage() {
           </div>
           <div className={styles.groupList}>
             {loading && <p className={styles.emptyList}>Загрузка...</p>}
-            {!loading && filteredGroups.length === 0 && (
+            {!loading && !debouncedQuery.trim() && (
+              <p className={styles.emptyList}>Введите название группы для поиска</p>
+            )}
+            {!loading && debouncedQuery.trim() && filteredGroups.length === 0 && (
               <p className={styles.emptyList}>Групп не найдено</p>
             )}
             {!loading &&

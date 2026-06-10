@@ -19,6 +19,7 @@ import { UserGroupRole } from '../groups/entities/user-group-role.entity';
 import { GroupSemesterDiscipline } from '../groups/entities/group-semester-discipline.entity';
 import { Discipline } from '../students/entities/discipline.entity';
 import { DisciplineType } from '../students/enums/discipline-type.enum';
+import { GradeValue } from '../students/enums/grade-value.enum';
 import { AssignGroupDisciplinesDto } from './dto/assign-group-disciplines.dto';
 import { Role } from '../../auth/enums/role.enum';
 import { CreateUserDto } from './dto/create-user.dto';
@@ -460,6 +461,208 @@ export class AdminService implements OnModuleInit {
     return this.disciplineRepo.find({ order: { name: 'ASC' } });
   }
 
+  async createDiscipline(name: string, disciplineType: DisciplineType): Promise<Discipline> {
+    const existing = await this.disciplineRepo.findOne({ where: { name } });
+    if (existing) throw new ConflictException(`Дисциплина "${name}" уже существует`);
+    return this.disciplineRepo.save(this.disciplineRepo.create({ name, disciplineType }));
+  }
+
+  // ─── Grades ──────────────────────────────────────────────────────────────
+
+  async getGradesForGroup(
+    groupId: string,
+    disciplineId: string,
+    semester: number,
+    academicYear: string,
+  ) {
+    const group = await this.groupRepo
+      .createQueryBuilder('g')
+      .leftJoinAndSelect('g.members', 'm')
+      .where('g.id = :groupId', { groupId })
+      .getOne();
+    if (!group) throw new NotFoundException('Группа не найдена');
+
+    const students = (group.members ?? []).filter((m) => m.role === Role.STUDENT);
+
+    const grades = await this.gradeRecordRepo.find({
+      where: { disciplineId, semester, academicYear },
+    });
+    const gradeMap = new Map(grades.map((g) => [g.studentId, g]));
+
+    return students
+      .sort((a, b) => (a.fullName ?? '').localeCompare(b.fullName ?? '', 'ru'))
+      .map((s) => ({
+        studentId: s.id,
+        fullName: s.fullName,
+        email: s.email,
+        gradeRecordId: gradeMap.get(s.id)?.id ?? null,
+        gradeValue: gradeMap.get(s.id)?.gradeValue ?? null,
+      }));
+  }
+
+  async upsertGrades(dto: {
+    disciplineId: string;
+    semester: number;
+    academicYear: string;
+    grades: Array<{ studentId: string; gradeValue: string | null }>;
+  }): Promise<{ saved: number; cleared: number }> {
+    let saved = 0;
+    let cleared = 0;
+
+    for (const g of dto.grades) {
+      const existing = await this.gradeRecordRepo.findOne({
+        where: { studentId: g.studentId, disciplineId: dto.disciplineId, semester: dto.semester, academicYear: dto.academicYear },
+      });
+
+      if (!g.gradeValue) {
+        if (existing) { await this.gradeRecordRepo.remove(existing); cleared++; }
+        continue;
+      }
+
+      if (existing) {
+        existing.gradeValue = g.gradeValue as GradeValue;
+        await this.gradeRecordRepo.save(existing);
+      } else {
+        await this.gradeRecordRepo.save(
+          this.gradeRecordRepo.create({
+            studentId: g.studentId,
+            disciplineId: dto.disciplineId,
+            semester: dto.semester,
+            academicYear: dto.academicYear,
+            gradeValue: g.gradeValue as GradeValue,
+          }),
+        );
+      }
+      saved++;
+    }
+
+    return { saved, cleared };
+  }
+
+  async importGrades(
+    buffer: Buffer,
+    mimetype: string,
+    originalname: string,
+  ): Promise<{ saved: number; skipped: number; errors: string[] }> {
+    type GradeEntry = { email: string; grade: string };
+    type GradeSet = { groupName: string; disciplineName: string; disciplineType?: string; semester: number; academicYear: string; grades: GradeEntry[] };
+
+    let items: GradeSet[];
+    try {
+      if (mimetype === 'application/json' || originalname.endsWith('.json')) {
+        items = JSON.parse(buffer.toString('utf-8'));
+        if (!Array.isArray(items)) throw new Error('JSON должен быть массивом');
+      } else if (mimetype === 'application/xml' || mimetype === 'text/xml' || originalname.endsWith('.xml')) {
+        items = this.parseGradesXml(buffer.toString('utf-8'));
+      } else {
+        throw new BadRequestException('Поддерживаются только JSON и XML файлы');
+      }
+    } catch (e: unknown) {
+      if (e instanceof BadRequestException) throw e;
+      throw new BadRequestException(`Ошибка разбора файла: ${e instanceof Error ? e.message : String(e)}`);
+    }
+
+    const validGrades = new Set<string>(Object.values(GradeValue));
+    let saved = 0;
+    let skipped = 0;
+    const errors: string[] = [];
+
+    for (const item of items) {
+      const group = await this.groupRepo
+        .createQueryBuilder('g')
+        .leftJoinAndSelect('g.members', 'm')
+        .where('g.name = :name', { name: item.groupName })
+        .getOne();
+      if (!group) {
+        errors.push(`Группа "${item.groupName}" не найдена`);
+        skipped += (item.grades ?? []).length;
+        continue;
+      }
+
+      let discipline = await this.disciplineRepo.findOne({ where: { name: item.disciplineName } });
+      if (!discipline) {
+        const discType = item.disciplineType === 'pass_fail' ? DisciplineType.PASS_FAIL : DisciplineType.EXAM;
+        discipline = await this.disciplineRepo.save(
+          this.disciplineRepo.create({ name: item.disciplineName, disciplineType: discType }),
+        );
+      }
+
+      const studentMap = new Map<string, User>(
+        (group.members ?? [])
+          .filter((m) => m.role === Role.STUDENT)
+          .map((m) => [m.email, m]),
+      );
+
+      for (const entry of item.grades ?? []) {
+        const student = studentMap.get(entry.email);
+        if (!student) {
+          errors.push(`Студент "${entry.email}" не найден в группе "${item.groupName}"`);
+          skipped++;
+          continue;
+        }
+        if (!validGrades.has(entry.grade)) {
+          errors.push(`Неверная оценка "${entry.grade}" для "${entry.email}"`);
+          skipped++;
+          continue;
+        }
+
+        const existing = await this.gradeRecordRepo.findOne({
+          where: { studentId: student.id, disciplineId: discipline.id, semester: item.semester, academicYear: item.academicYear },
+        });
+        if (existing) {
+          existing.gradeValue = entry.grade as GradeValue;
+          await this.gradeRecordRepo.save(existing);
+        } else {
+          await this.gradeRecordRepo.save(
+            this.gradeRecordRepo.create({
+              studentId: student.id,
+              disciplineId: discipline.id,
+              semester: item.semester,
+              academicYear: item.academicYear,
+              gradeValue: entry.grade as GradeValue,
+            }),
+          );
+        }
+        saved++;
+      }
+    }
+
+    return { saved, skipped, errors };
+  }
+
+  private parseGradesXml(xml: string): Array<{
+    groupName: string; disciplineName: string; disciplineType?: string;
+    semester: number; academicYear: string; grades: Array<{ email: string; grade: string }>;
+  }> {
+    const getString = (src: string, tag: string) => {
+      const m = src.match(new RegExp(`<${tag}>(.*?)<\\/${tag}>`));
+      return m ? m[1].trim() : undefined;
+    };
+
+    const items: ReturnType<typeof this.parseGradesXml> = [];
+    const entryBlocks = xml.match(/<entry>([\s\S]*?)<\/entry>/g) ?? [];
+
+    for (const block of entryBlocks) {
+      const groupName = getString(block, 'groupName');
+      const disciplineName = getString(block, 'disciplineName');
+      const disciplineType = getString(block, 'disciplineType');
+      const semStr = getString(block, 'semester');
+      const academicYear = getString(block, 'academicYear');
+      if (!groupName || !disciplineName || !semStr || !academicYear) continue;
+
+      const gradeBlocks = block.match(/<grade>([\s\S]*?)<\/grade>/g) ?? [];
+      const grades: Array<{ email: string; grade: string }> = [];
+      for (const g of gradeBlocks) {
+        const email = getString(g, 'email');
+        const grade = getString(g, 'value');
+        if (email && grade) grades.push({ email, grade });
+      }
+
+      items.push({ groupName, disciplineName, disciplineType, semester: Number(semStr), academicYear, grades });
+    }
+    return items;
+  }
+
   // ─── Group semester disciplines ───────────────────────────────────────────
 
   async assignGroupDisciplines(dto: AssignGroupDisciplinesDto): Promise<{ assigned: number; skipped: number }> {
@@ -528,12 +731,21 @@ export class AdminService implements OnModuleInit {
     mimetype: string,
     originalname: string,
   ): Promise<{ assigned: number; skipped: number; errors: string[] }> {
-    let items: Array<{ groupName: string; disciplines: string[]; semester: number; academicYear: string }>;
+    type DisciplineEntry = { name: string; type?: string };
+    type GroupItem = { groupName: string; disciplines: DisciplineEntry[]; semester: number; academicYear: string };
+
+    let items: GroupItem[];
 
     try {
       if (mimetype === 'application/json' || originalname.endsWith('.json')) {
-        items = JSON.parse(buffer.toString('utf-8'));
-        if (!Array.isArray(items)) throw new Error('JSON должен быть массивом');
+        const raw = JSON.parse(buffer.toString('utf-8'));
+        if (!Array.isArray(raw)) throw new Error('JSON должен быть массивом');
+        items = raw.map((item: any) => ({
+          ...item,
+          disciplines: (item.disciplines ?? []).map((d: any) =>
+            typeof d === 'string' ? { name: d } : { name: d.name, type: d.type },
+          ),
+        }));
       } else if (mimetype === 'application/xml' || mimetype === 'text/xml' || originalname.endsWith('.xml')) {
         items = this.parseGroupDisciplinesXml(buffer.toString('utf-8'));
       } else {
@@ -552,17 +764,22 @@ export class AdminService implements OnModuleInit {
       const group = await this.groupRepo.findOne({ where: { name: item.groupName } });
       if (!group) {
         errors.push(`Группа "${item.groupName}" не найдена`);
-        skipped += (item.disciplines ?? []).length;
-        continue;
       }
 
-      for (const disciplineName of item.disciplines ?? []) {
-        let discipline = await this.disciplineRepo.findOne({ where: { name: disciplineName } });
+      for (const disc of item.disciplines ?? []) {
+        const discName = disc.name?.trim();
+        if (!discName) continue;
+
+        const discType = disc.type === 'pass_fail' ? DisciplineType.PASS_FAIL : DisciplineType.EXAM;
+
+        let discipline = await this.disciplineRepo.findOne({ where: { name: discName } });
         if (!discipline) {
           discipline = await this.disciplineRepo.save(
-            this.disciplineRepo.create({ name: disciplineName, disciplineType: DisciplineType.EXAM }),
+            this.disciplineRepo.create({ name: discName, disciplineType: discType }),
           );
         }
+
+        if (!group) { skipped++; continue; }
 
         const exists = await this.groupSemDisciplineRepo.findOne({
           where: { groupId: group.id, disciplineId: discipline.id, semester: item.semester, academicYear: item.academicYear },
@@ -775,13 +992,13 @@ export class AdminService implements OnModuleInit {
     return rest as Omit<User, 'password'>;
   }
 
-  private parseGroupDisciplinesXml(xml: string): Array<{ groupName: string; disciplines: string[]; semester: number; academicYear: string }> {
+  private parseGroupDisciplinesXml(xml: string): Array<{ groupName: string; disciplines: Array<{ name: string; type?: string }>; semester: number; academicYear: string }> {
     const getString = (src: string, tag: string) => {
       const m = src.match(new RegExp(`<${tag}>(.*?)<\\/${tag}>`));
       return m ? m[1].trim() : undefined;
     };
 
-    const items: Array<{ groupName: string; disciplines: string[]; semester: number; academicYear: string }> = [];
+    const items: Array<{ groupName: string; disciplines: Array<{ name: string; type?: string }>; semester: number; academicYear: string }> = [];
     const groupBlocks = xml.match(/<group>([\s\S]*?)<\/group>/g) ?? [];
 
     for (const block of groupBlocks) {
@@ -790,11 +1007,14 @@ export class AdminService implements OnModuleInit {
       const academicYear = getString(block, 'academicYear');
       if (!groupName || !semStr || !academicYear) continue;
 
-      const discMatches = block.match(/<discipline>([\s\S]*?)<\/discipline>/g) ?? [];
-      const disciplines = discMatches.map((d) => {
-        const m = d.match(/<discipline>([\s\S]*?)<\/discipline>/);
-        return m ? m[1].trim() : '';
-      }).filter(Boolean);
+      const discMatches = block.match(/<discipline(?:\s[^>]*)?>([\s\S]*?)<\/discipline>/g) ?? [];
+      const disciplines: Array<{ name: string; type?: string }> = [];
+      for (const d of discMatches) {
+        const typeAttr = d.match(/type="([^"]+)"/)?.[1];
+        const nameMatch = d.match(/<discipline(?:\s[^>]*)?>([^<]*)<\/discipline>/);
+        const name = nameMatch ? nameMatch[1].trim() : '';
+        if (name) disciplines.push({ name, type: typeAttr });
+      }
 
       items.push({ groupName, disciplines, semester: Number(semStr), academicYear });
     }

@@ -394,12 +394,21 @@ export default function AdminScholarshipsPage() {
       .then((r) => setScholarships(r.data))
       .catch(() => {});
 
-  const filteredStudents = query.trim()
+  const [debouncedQuery, setDebouncedQuery] = useState('');
+  const queryDebounceRef = useRef(null);
+
+  useEffect(() => {
+    if (queryDebounceRef.current) clearTimeout(queryDebounceRef.current);
+    queryDebounceRef.current = setTimeout(() => setDebouncedQuery(query), 1000);
+    return () => clearTimeout(queryDebounceRef.current);
+  }, [query]);
+
+  const filteredStudents = debouncedQuery.trim()
     ? students.filter((u) => {
-        const q = query.toLowerCase();
+        const q = debouncedQuery.toLowerCase();
         return u.fullName?.toLowerCase().includes(q) || u.email?.toLowerCase().includes(q);
       })
-    : students;
+    : [];
 
   const handleCreate = async (payload) => {
     setFormLoading(true);
@@ -525,7 +534,10 @@ export default function AdminScholarshipsPage() {
           </div>
           <div className={adminStyles.userList}>
             {studentsLoading && <p className={adminStyles.emptyList}>Загрузка...</p>}
-            {!studentsLoading && filteredStudents.length === 0 && (
+            {!studentsLoading && !debouncedQuery.trim() && (
+              <p className={adminStyles.emptyList}>Введите имя или email для поиска</p>
+            )}
+            {!studentsLoading && debouncedQuery.trim() && filteredStudents.length === 0 && (
               <p className={adminStyles.emptyList}>Студентов не найдено</p>
             )}
             {!studentsLoading &&

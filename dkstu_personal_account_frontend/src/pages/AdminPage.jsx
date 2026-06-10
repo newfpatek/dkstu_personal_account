@@ -51,6 +51,10 @@ export default function AdminPage() {
             <span className={styles.navFull}>Группы</span>
             <span className={styles.navShort}>Группы</span>
           </NavLink>
+          <NavLink to="/admin/grades" className={navClass}>
+            <span className={styles.navFull}>Оценки</span>
+            <span className={styles.navShort}>Оценки</span>
+          </NavLink>
           <NavLink to="/admin/scholarships" className={navClass}>
             <span className={styles.navFull}>Стипендии</span>
             <span className={styles.navShort}>Стипендии</span>

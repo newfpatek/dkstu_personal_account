@@ -34,14 +34,31 @@ export class MessagesController {
     return this.messagesService.searchCombined(req.user.id, req.user.role, q);
   }
 
+  @Get('inbox/irrelevant')
+  getIrrelevantInbox(
+    @Request() req: any,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+  ) {
+    const p = Math.max(1, parseInt(page ?? '1', 10) || 1);
+    const l = Math.min(50, Math.max(1, parseInt(limit ?? '10', 10) || 10));
+    return this.messagesService.getIrrelevantInbox(req.user.id, p, l);
+  }
+
   @Get('inbox')
   getInbox(@Request() req: any) {
     return this.messagesService.getInbox(req.user.id);
   }
 
   @Get('sent')
-  getSent(@Request() req: any) {
-    return this.messagesService.getSent(req.user.id);
+  getSent(
+    @Request() req: any,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+  ) {
+    const p = Math.max(1, parseInt(page ?? '1', 10) || 1);
+    const l = Math.min(50, Math.max(1, parseInt(limit ?? '10', 10) || 10));
+    return this.messagesService.getSent(req.user.id, p, l);
   }
 
   @Patch(':id/status')

@@ -1,6 +1,6 @@
-import { Injectable, BadRequestException } from '@nestjs/common';
+import { Injectable, BadRequestException, OnModuleInit } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Not, Repository } from 'typeorm';
+import { LessThan, Repository } from 'typeorm';
 import { Message } from './entities/message.entity';
 import { MessageUserStatus } from './entities/message-user-status.entity';
 import { User } from '../users/entities/user.entity';
@@ -9,13 +9,24 @@ import { SendMessageDto } from './dto/send-message.dto';
 import { Role } from '../../auth/enums/role.enum';
 
 @Injectable()
-export class MessagesService {
+export class MessagesService implements OnModuleInit {
   constructor(
     @InjectRepository(Message) private messageRepo: Repository<Message>,
     @InjectRepository(MessageUserStatus) private statusRepo: Repository<MessageUserStatus>,
     @InjectRepository(User) private userRepo: Repository<User>,
     @InjectRepository(Group) private groupRepo: Repository<Group>,
   ) {}
+
+  async onModuleInit() {
+    await this.cleanupOldMessages();
+    setInterval(() => this.cleanupOldMessages(), 24 * 60 * 60 * 1000);
+  }
+
+  private async cleanupOldMessages(): Promise<void> {
+    const cutoff = new Date();
+    cutoff.setMonth(cutoff.getMonth() - 6);
+    await this.messageRepo.delete({ createdAt: LessThan(cutoff) });
+  }
 
   async send(senderId: string, dto: SendMessageDto): Promise<Message> {
     if (!dto.groupId && !dto.studentId) {
@@ -24,7 +35,6 @@ export class MessagesService {
     if (dto.groupId && dto.studentId) {
       throw new BadRequestException('Укажите либо groupId, либо studentId, но не оба');
     }
-
     const message = this.messageRepo.create({
       senderId,
       groupId: dto.groupId ?? null,
@@ -34,50 +44,81 @@ export class MessagesService {
     return this.messageRepo.save(message);
   }
 
-  async getInbox(userId: string): Promise<(Message & { isRelevant: boolean })[]> {
-    const userWithGroups = await this.userRepo
+  private async getUserGroupIds(userId: string): Promise<string[]> {
+    const user = await this.userRepo
       .createQueryBuilder('u')
       .leftJoinAndSelect('u.groups', 'g')
       .where('u.id = :userId', { userId })
       .getOne();
+    return (user?.groups ?? []).map((g) => g.id);
+  }
 
-    const groupIds = (userWithGroups?.groups ?? []).map((g) => g.id);
-
+  private buildInboxQb(userId: string, groupIds: string[]) {
     const qb = this.messageRepo
       .createQueryBuilder('m')
       .leftJoinAndSelect('m.sender', 'sender')
-      .leftJoinAndSelect('m.group', 'group')
-      .where('m.recipientId = :userId', { userId });
+      .leftJoinAndSelect('m.group', 'group');
 
     if (groupIds.length > 0) {
-      qb.orWhere('m.groupId IN (:...groupIds)', { groupIds });
+      qb.where('(m.recipientId = :userId OR m.groupId IN (:...groupIds))', { userId, groupIds });
+    } else {
+      qb.where('m.recipientId = :userId', { userId });
     }
-
-    const messages = await qb.orderBy('m.createdAt', 'DESC').getMany();
-
-    if (messages.length === 0) return [];
-
-    const messageIds = messages.map((m) => m.id);
-    const statuses = await this.statusRepo
-      .createQueryBuilder('s')
-      .where('s.userId = :userId', { userId })
-      .andWhere('s.messageId IN (:...messageIds)', { messageIds })
-      .getMany();
-
-    const statusMap = new Map(statuses.map((s) => [s.messageId, s.isRelevant]));
-
-    return messages.map((m) => ({
-      ...m,
-      isRelevant: statusMap.has(m.id) ? statusMap.get(m.id)! : true,
-    }));
+    return qb;
   }
 
-  async getSent(senderId: string): Promise<Message[]> {
-    return this.messageRepo.find({
+  async getInbox(userId: string): Promise<(Message & { isRelevant: boolean })[]> {
+    const groupIds = await this.getUserGroupIds(userId);
+    const messages = await this.buildInboxQb(userId, groupIds)
+      .andWhere(
+        `NOT EXISTS (
+          SELECT 1 FROM message_user_statuses mus
+          WHERE mus.message_id = m.id
+            AND mus.user_id = :userId
+            AND mus.is_relevant = false
+        )`,
+        { userId },
+      )
+      .orderBy('m.createdAt', 'DESC')
+      .getMany();
+    return messages.map((m) => ({ ...m, isRelevant: true }));
+  }
+
+  async getIrrelevantInbox(userId: string, page: number, limit: number) {
+    const groupIds = await this.getUserGroupIds(userId);
+    const [messages, total] = await this.buildInboxQb(userId, groupIds)
+      .andWhere(
+        `EXISTS (
+          SELECT 1 FROM message_user_statuses mus
+          WHERE mus.message_id = m.id
+            AND mus.user_id = :userId
+            AND mus.is_relevant = false
+        )`,
+        { userId },
+      )
+      .orderBy('m.createdAt', 'DESC')
+      .skip((page - 1) * limit)
+      .take(limit)
+      .getManyAndCount();
+
+    return {
+      data: messages.map((m) => ({ ...m, isRelevant: false })),
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit) || 1,
+    };
+  }
+
+  async getSent(senderId: string, page: number, limit: number) {
+    const [data, total] = await this.messageRepo.findAndCount({
       where: { senderId },
       relations: { recipient: true, group: true },
       order: { createdAt: 'DESC' },
+      skip: (page - 1) * limit,
+      take: limit,
     });
+    return { data, total, page, limit, totalPages: Math.ceil(total / limit) || 1 };
   }
 
   async getUsers(
@@ -95,7 +136,6 @@ export class MessagesService {
         { q: `%${query.trim()}%` },
       );
     }
-
     return qb.orderBy('u.fullName', 'ASC').limit(10).getMany();
   }
 
@@ -122,7 +162,6 @@ export class MessagesService {
       const q = query.trim().toLowerCase();
       groups = groups.filter((g) => g.name.toLowerCase().includes(q));
     }
-
     return groups.sort((a, b) => a.name.localeCompare(b.name, 'ru')).slice(0, 10);
   }
 

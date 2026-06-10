@@ -432,13 +432,18 @@ export default function StaffStudentsPage() {
 
   useEffect(() => {
     if (debounceRef.current) clearTimeout(debounceRef.current);
+    if (!query.trim()) {
+      setStudents([]);
+      setLoading(false);
+      return;
+    }
     debounceRef.current = setTimeout(() => {
       setLoading(true);
-      searchStudents(query || undefined)
+      searchStudents(query)
         .then((r) => setStudents(r.data))
         .catch((err) => showToast(getErrorMessage(err, 'Ошибка поиска студентов')))
         .finally(() => setLoading(false));
-    }, 300);
+    }, 1000);
     return () => clearTimeout(debounceRef.current);
   }, [query]);
 
@@ -461,7 +466,10 @@ export default function StaffStudentsPage() {
 
           <div className={styles.studentList}>
             {loading && <p className={styles.emptyList}>Загрузка...</p>}
-            {!loading && students.length === 0 && (
+            {!loading && !query.trim() && (
+              <p className={styles.emptyList}>Введите имя или email для поиска</p>
+            )}
+            {!loading && query.trim() && students.length === 0 && (
               <p className={styles.emptyList}>Студентов не найдено</p>
             )}
             {!loading &&

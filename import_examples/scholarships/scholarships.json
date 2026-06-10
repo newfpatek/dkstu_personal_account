@@ -1,0 +1,27 @@
+[
+  {
+    "email": "ivanov.ivan@kstu.ru",
+    "type": "academic",
+    "periodStart": "2025-09-01",
+    "periodEnd": "2026-01-31"
+  },
+  {
+    "email": "petrova.anna@kstu.ru",
+    "type": "enhanced_academic",
+    "direction": "research",
+    "periodStart": "2025-09-01",
+    "periodEnd": "2026-01-31",
+    "amount": 8500.00
+  },
+  {
+    "email": "sidorov.alex@kstu.ru",
+    "type": "academic_coeff_1_4",
+    "periodStart": "2025-09-01",
+    "periodEnd": "2026-01-31"
+  },
+  {
+    "email": "morozov.dmitry@kstu.ru",
+    "type": "social",
+    "periodStart": "2025-09-01"
+  }
+]

@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<scholarships>
+  <scholarship>
+    <email>ivanov.ivan@kstu.ru</email>
+    <type>academic</type>
+    <periodStart>2025-09-01</periodStart>
+    <periodEnd>2026-01-31</periodEnd>
+  </scholarship>
+  <scholarship>
+    <email>petrova.anna@kstu.ru</email>
+    <type>enhanced_academic</type>
+    <direction>research</direction>
+    <periodStart>2025-09-01</periodStart>
+    <periodEnd>2026-01-31</periodEnd>
+    <amount>8500</amount>
+  </scholarship>
+  <scholarship>
+    <email>sidorov.alex@kstu.ru</email>
+    <type>academic_coeff_1_4</type>
+    <periodStart>2025-09-01</periodStart>
+    <periodEnd>2026-01-31</periodEnd>
+  </scholarship>
+  <scholarship>
+    <email>morozov.dmitry@kstu.ru</email>
+    <type>social</type>
+    <periodStart>2025-09-01</periodStart>
+  </scholarship>
+</scholarships>

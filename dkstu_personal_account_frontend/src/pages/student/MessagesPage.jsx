@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import {
-  getInbox, getSent, sendMessage,
+  getInbox, getIrrelevantInbox, getSent as getSentApi, sendMessage,
   getMessageUsers, searchRecipients, setMessageRelevance,
 } from '../../api/messages';
 import { formatDateTime } from '../../utils/date';
@@ -16,31 +16,48 @@ const ROLE_LABELS = {
   admin: 'Администратор',
 };
 
-const LS_KEY = 'msgRelevance';
+const PAGE_SIZE = 10;
+const EMPTY_PAGED = { data: [], total: 0, page: 1, limit: PAGE_SIZE, totalPages: 1 };
 
-function loadLocalRelevance() {
-  try { return JSON.parse(localStorage.getItem(LS_KEY) || '{}'); } catch { return {}; }
+function getPageNumbers(current, total) {
+  if (total <= 7) return Array.from({ length: total }, (_, i) => i + 1);
+  const pages = [1];
+  if (current > 3) pages.push('...');
+  for (let i = Math.max(2, current - 1); i <= Math.min(total - 1, current + 1); i++) {
+    pages.push(i);
+  }
+  if (current < total - 2) pages.push('...');
+  pages.push(total);
+  return pages;
 }
 
-function saveLocalRelevance(msgId, val) {
-  const data = loadLocalRelevance();
-  data[msgId] = val;
-  localStorage.setItem(LS_KEY, JSON.stringify(data));
+function Pagination({ page, totalPages, onPageChange }) {
+  if (totalPages <= 1) return null;
+  return (
+    <div className={styles.pagination}>
+      <button
+        className={styles.pageBtn}
+        disabled={page === 1}
+        onClick={() => onPageChange(page - 1)}
+      >‹</button>
+      {getPageNumbers(page, totalPages).map((p, i) =>
+        p === '...'
+          ? <span key={`el-${i}`} className={styles.pageEllipsis}>…</span>
+          : <button
+              key={p}
+              className={`${styles.pageBtn} ${p === page ? styles.pageActive : ''}`}
+              onClick={() => onPageChange(p)}
+            >{p}</button>
+      )}
+      <button
+        className={styles.pageBtn}
+        disabled={page === totalPages}
+        onClick={() => onPageChange(page + 1)}
+      >›</button>
+    </div>
+  );
 }
 
-function applyLocalOverrides(messages) {
-  const local = loadLocalRelevance();
-  return messages.map((m) => ({
-    ...m,
-    isRelevant: m.id in local ? local[m.id] : (m.isRelevant !== false),
-  }));
-}
-
-const formatDate = formatDateTime;
-
-// isStudent=true  → searches only users (getMessageUsers)
-// isStudent=false → searches users + groups (searchRecipients)
-// onSelect(id, kind) where kind = 'user' | 'group'
 function RecipientInput({ isStudent, onSelect, onClear }) {
   const [inputVal, setInputVal] = useState('');
   const [isSelected, setIsSelected] = useState(false);
@@ -62,10 +79,8 @@ function RecipientInput({ isStudent, onSelect, onClear }) {
     const val = e.target.value;
     setInputVal(val);
     if (isSelected) { setIsSelected(false); onClear(); }
-
     clearTimeout(debounceRef.current);
     if (val.trim().length < 2) { setSuggestions([]); setShowDrop(false); return; }
-
     debounceRef.current = setTimeout(async () => {
       setSearching(true);
       try {
@@ -81,13 +96,11 @@ function RecipientInput({ isStudent, onSelect, onClear }) {
 
   const handleSelectItem = (item) => {
     const isGroup = item.type === 'group';
-    const label = isGroup ? item.name : item.fullName;
-    const kind = isGroup ? 'group' : 'user';
-    setInputVal(label);
+    setInputVal(isGroup ? item.name : item.fullName);
     setIsSelected(true);
     setSuggestions([]);
     setShowDrop(false);
-    onSelect(item.id, kind);
+    onSelect(item.id, isGroup ? 'group' : 'user');
   };
 
   const handleClear = () => {
@@ -122,23 +135,15 @@ function RecipientInput({ isStudent, onSelect, onClear }) {
           {!searching && suggestions.map((item) => {
             const isGroup = item.type === 'group';
             return (
-              <div
-                key={item.id}
-                className={styles.suggestItem}
-                onMouseDown={() => handleSelectItem(item)}
-              >
+              <div key={item.id} className={styles.suggestItem} onMouseDown={() => handleSelectItem(item)}>
                 <div className={styles.suggestName}>
                   {isGroup ? item.name : item.fullName}
                   <span className={styles.resultTypeBadge}>
                     {isGroup ? 'Группа' : (ROLE_LABELS[item.role] || item.role)}
                   </span>
                 </div>
-                {!isGroup && item.email && (
-                  <div className={styles.suggestSub}>{item.email}</div>
-                )}
-                {isGroup && item.year && (
-                  <div className={styles.suggestSub}>Год набора: {item.year}</div>
-                )}
+                {!isGroup && item.email && <div className={styles.suggestSub}>{item.email}</div>}
+                {isGroup && item.year && <div className={styles.suggestSub}>Год набора: {item.year}</div>}
               </div>
             );
           })}
@@ -151,7 +156,6 @@ function RecipientInput({ isStudent, onSelect, onClear }) {
 function MsgItem({ msg, tab, onToggleRelevance }) {
   const [expanded, setExpanded] = useState(false);
   const isRelevant = msg.isRelevant !== false;
-
   const counterpart =
     tab === 'inbox'
       ? msg.sender?.fullName || 'Система'
@@ -165,7 +169,7 @@ function MsgItem({ msg, tab, onToggleRelevance }) {
           <strong>{counterpart}</strong>
         </span>
         <div className={styles.msgMeta}>
-          <span className={styles.msgDate}>{formatDate(msg.createdAt)}</span>
+          <span className={styles.msgDate}>{formatDateTime(msg.createdAt)}</span>
           {tab === 'inbox' && (
             <button
               className={`${styles.relevanceBtn} ${isRelevant ? styles.relevanceBtnActive : styles.relevanceBtnInactive}`}
@@ -192,38 +196,56 @@ export default function MessagesPage() {
   const isStudent = currentUserRole === 'student';
 
   const [tab, setTab] = useState('inbox');
-  const [inbox, setInbox] = useState([]);
-  const [sent, setSent] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [loadError, setLoadError] = useState(false);
-  const [showCompose, setShowCompose] = useState(false);
+
+  const [relevant, setRelevant] = useState([]);
+  const [relevantLoading, setRelevantLoading] = useState(true);
+  const [relevantError, setRelevantError] = useState(false);
+
+  const [irrelevant, setIrrelevant] = useState(EMPTY_PAGED);
+  const [irrelevantLoaded, setIrrelevantLoaded] = useState(false);
+  const [irrelevantLoading, setIrrelevantLoading] = useState(false);
   const [showIrrelevant, setShowIrrelevant] = useState(false);
 
+  const [sent, setSent] = useState(EMPTY_PAGED);
+  const [sentLoaded, setSentLoaded] = useState(false);
+  const [sentLoading, setSentLoading] = useState(false);
+
+  const [showCompose, setShowCompose] = useState(false);
   const [recipientId, setRecipientId] = useState(null);
   const [recipientKind, setRecipientKind] = useState('user');
   const [msgText, setMsgText] = useState('');
   const [sending, setSending] = useState(false);
   const [sendError, setSendError] = useState('');
 
-  const loadAll = () => {
-    setLoading(true);
-    setLoadError(false);
-    Promise.all([
-      getInbox().then((r) => r.data),
-      getSent().then((r) => r.data),
-    ])
-      .then(([inboxData, sentData]) => {
-        setInbox(applyLocalOverrides(inboxData));
-        setSent(sentData);
-      })
+  const loadRelevant = () => {
+    setRelevantLoading(true);
+    setRelevantError(false);
+    getInbox()
+      .then((r) => setRelevant(r.data))
       .catch((err) => {
-        showToast(getErrorMessage(err, 'Не удалось загрузить сообщения'));
-        setLoadError(true);
+        showToast(getErrorMessage(err, 'Не удалось загрузить входящие'));
+        setRelevantError(true);
       })
-      .finally(() => setLoading(false));
+      .finally(() => setRelevantLoading(false));
   };
 
-  useEffect(() => { loadAll(); }, []);
+  const loadIrrelevant = (page) => {
+    setIrrelevantLoading(true);
+    getIrrelevantInbox(page, PAGE_SIZE)
+      .then((r) => { setIrrelevant(r.data); setIrrelevantLoaded(true); })
+      .catch(() => showToast('Не удалось загрузить неактуальные сообщения'))
+      .finally(() => setIrrelevantLoading(false));
+  };
+
+  const loadSent = (page) => {
+    setSentLoading(true);
+    getSentApi(page, PAGE_SIZE)
+      .then((r) => { setSent(r.data); setSentLoaded(true); })
+      .catch((err) => showToast(getErrorMessage(err, 'Не удалось загрузить отправленные')))
+      .finally(() => setSentLoading(false));
+  };
+
+  useEffect(() => { loadRelevant(); }, []);
 
   useEffect(() => {
     if (!showCompose) {
@@ -234,29 +256,52 @@ export default function MessagesPage() {
     }
   }, [showCompose]);
 
+  const handleTabChange = (newTab) => {
+    setTab(newTab);
+    if (newTab === 'sent' && !sentLoaded) loadSent(1);
+  };
+
+  const handleToggleIrrelevant = () => {
+    const next = !showIrrelevant;
+    setShowIrrelevant(next);
+    if (next && !irrelevantLoaded) loadIrrelevant(1);
+  };
+
   const handleToggleRelevance = async (msgId, currentIsRelevant) => {
     const newVal = !currentIsRelevant;
-    saveLocalRelevance(msgId, newVal);
-    setInbox((prev) => prev.map((m) => (m.id === msgId ? { ...m, isRelevant: newVal } : m)));
-    if (!newVal) setShowIrrelevant(true);
-    try { await setMessageRelevance(msgId, newVal); } catch { /* localStorage already saved */ }
+    if (currentIsRelevant) {
+      setRelevant((prev) => prev.filter((m) => m.id !== msgId));
+    } else {
+      setIrrelevant((prev) => ({ ...prev, data: prev.data.filter((m) => m.id !== msgId) }));
+    }
+    try {
+      await setMessageRelevance(msgId, newVal);
+    } catch {}
+    loadRelevant();
+    if (currentIsRelevant) {
+      setShowIrrelevant(true);
+      loadIrrelevant(1);
+      setIrrelevantLoaded(true);
+    } else if (irrelevantLoaded) {
+      loadIrrelevant(irrelevant.page);
+    }
   };
 
   const handleSend = async (e) => {
     e.preventDefault();
     if (!recipientId) { setSendError('Выберите получателя из списка'); return; }
     if (!msgText.trim()) { setSendError('Введите текст сообщения'); return; }
-
     const payload = recipientKind === 'group'
       ? { groupId: recipientId, text: msgText.trim() }
       : { studentId: recipientId, text: msgText.trim() };
-
     setSending(true);
     setSendError('');
     try {
       await sendMessage(payload);
       setShowCompose(false);
-      loadAll();
+      loadRelevant();
+      loadSent(1);
+      setSentLoaded(true);
     } catch (err) {
       showToast(getErrorMessage(err, 'Ошибка при отправке сообщения'));
     } finally {
@@ -264,17 +309,11 @@ export default function MessagesPage() {
     }
   };
 
-  const relevant = inbox.filter((m) => m.isRelevant !== false);
-  const irrelevant = inbox.filter((m) => m.isRelevant === false);
-
   return (
     <div>
       <div className={styles.topRow}>
         <h1 className={s.pageTitle} style={{ margin: 0 }}>Сообщения</h1>
-        <button
-          className={styles.composeBtn}
-          onClick={() => setShowCompose((v) => !v)}
-        >
+        <button className={styles.composeBtn} onClick={() => setShowCompose((v) => !v)}>
           {showCompose ? 'Отмена' : '✏ Написать'}
         </button>
       </div>
@@ -291,7 +330,6 @@ export default function MessagesPage() {
               onClear={() => { setRecipientId(null); setRecipientKind('user'); }}
             />
           </div>
-
           <div className={styles.formRow}>
             <label className={styles.formLabel}>Сообщение</label>
             <textarea
@@ -302,9 +340,7 @@ export default function MessagesPage() {
               onChange={(e) => setMsgText(e.target.value)}
             />
           </div>
-
           {sendError && <p className={s.errorMsg}>{sendError}</p>}
-
           <button className={styles.sendBtn} type="submit" disabled={sending}>
             {sending ? 'Отправка...' : 'Отправить'}
           </button>
@@ -314,71 +350,89 @@ export default function MessagesPage() {
       <div className={s.tabs}>
         <button
           className={`${s.tab} ${tab === 'inbox' ? s.activeTab : ''}`}
-          onClick={() => setTab('inbox')}
+          onClick={() => handleTabChange('inbox')}
         >
           Входящие
           {relevant.length > 0 && <span className={styles.badge}>{relevant.length}</span>}
         </button>
         <button
           className={`${s.tab} ${tab === 'sent' ? s.activeTab : ''}`}
-          onClick={() => setTab('sent')}
+          onClick={() => handleTabChange('sent')}
         >
           Отправленные
         </button>
       </div>
 
-      {loading && <p className={s.empty}>Загрузка...</p>}
-
-      {!loading && !loadError && tab === 'inbox' && (
-        <>
-          <div className={styles.sectionHeader}>
-            <span className={styles.sectionTitle}>Актуальные</span>
-            <span className={styles.sectionCount}>{relevant.length}</span>
-          </div>
-
-          {relevant.length === 0 ? (
-            <p className={s.empty}>Нет актуальных сообщений</p>
-          ) : (
-            <div className={styles.msgList}>
-              {relevant.map((msg) => (
-                <MsgItem key={msg.id} msg={msg} tab="inbox" onToggleRelevance={handleToggleRelevance} />
-              ))}
+      {tab === 'inbox' && (
+        relevantLoading ? (
+          <p className={s.empty}>Загрузка...</p>
+        ) : relevantError ? (
+          <p className={s.errorMsg}>Не удалось загрузить сообщения</p>
+        ) : (
+          <>
+            <div className={styles.sectionHeader}>
+              <span className={styles.sectionTitle}>Актуальные</span>
+              <span className={styles.sectionCount}>{relevant.length}</span>
             </div>
-          )}
-
-          <button
-            className={styles.irrelevantToggle}
-            onClick={() => setShowIrrelevant((v) => !v)}
-          >
-            {showIrrelevant ? '▲' : '▼'} Неактуальные
-            {irrelevant.length > 0 && (
-              <span className={styles.sectionCountMuted}>{irrelevant.length}</span>
-            )}
-          </button>
-
-          {showIrrelevant && (
-            irrelevant.length === 0 ? (
-              <p className={s.empty}>Нет неактуальных сообщений</p>
+            {relevant.length === 0 ? (
+              <p className={s.empty}>Нет актуальных сообщений</p>
             ) : (
               <div className={styles.msgList}>
-                {irrelevant.map((msg) => (
+                {relevant.map((msg) => (
                   <MsgItem key={msg.id} msg={msg} tab="inbox" onToggleRelevance={handleToggleRelevance} />
                 ))}
               </div>
-            )
-          )}
-        </>
+            )}
+
+            <button className={styles.irrelevantToggle} onClick={handleToggleIrrelevant}>
+              {showIrrelevant ? '▲' : '▼'} Неактуальные
+              {irrelevantLoaded && irrelevant.total > 0 && (
+                <span className={styles.sectionCountMuted}>{irrelevant.total}</span>
+              )}
+            </button>
+
+            {showIrrelevant && (
+              irrelevantLoading ? (
+                <p className={s.empty}>Загрузка...</p>
+              ) : irrelevant.data.length === 0 ? (
+                <p className={s.empty}>Нет неактуальных сообщений</p>
+              ) : (
+                <>
+                  <Pagination
+                    page={irrelevant.page}
+                    totalPages={irrelevant.totalPages}
+                    onPageChange={(p) => loadIrrelevant(p)}
+                  />
+                  <div className={styles.msgList}>
+                    {irrelevant.data.map((msg) => (
+                      <MsgItem key={msg.id} msg={msg} tab="inbox" onToggleRelevance={handleToggleRelevance} />
+                    ))}
+                  </div>
+                </>
+              )
+            )}
+          </>
+        )
       )}
 
-      {!loading && !loadError && tab === 'sent' && (
-        sent.length === 0 ? (
+      {tab === 'sent' && (
+        (sentLoading || !sentLoaded) ? (
+          <p className={s.empty}>Загрузка...</p>
+        ) : sent.data.length === 0 ? (
           <p className={s.empty}>Нет отправленных сообщений</p>
         ) : (
-          <div className={styles.msgList}>
-            {sent.map((msg) => (
-              <MsgItem key={msg.id} msg={msg} tab="sent" onToggleRelevance={() => {}} />
-            ))}
-          </div>
+          <>
+            <Pagination
+              page={sent.page}
+              totalPages={sent.totalPages}
+              onPageChange={(p) => loadSent(p)}
+            />
+            <div className={styles.msgList}>
+              {sent.data.map((msg) => (
+                <MsgItem key={msg.id} msg={msg} tab="sent" onToggleRelevance={() => {}} />
+              ))}
+            </div>
+          </>
         )
       )}
     </div>

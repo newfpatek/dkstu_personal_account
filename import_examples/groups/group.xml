@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<group>
+  <name>ИВТ-21-1</name>
+  <year>2021</year>
+  <members>
+    <member>
+      <email>ivanov.ivan@kstu.ru</email>
+      <name>Иванов Иван Иванович</name>
+      <password>Stud2024!</password>
+      <role>student</role>
+      <isPaid>false</isPaid>
+    </member>
+    <member>
+      <email>petrova.anna@kstu.ru</email>
+      <name>Петрова Анна Сергеевна</name>
+      <password>Stud2024!</password>
+      <role>student</role>
+      <isPaid>false</isPaid>
+    </member>
+    <member>
+      <email>sidorov.alex@kstu.ru</email>
+      <name>Сидоров Алексей Николаевич</name>
+      <password>Stud2024!</password>
+      <role>student</role>
+      <isPaid>false</isPaid>
+    </member>
+    <member>
+      <email>kozlova.maria@kstu.ru</email>
+      <name>Козлова Мария Дмитриевна</name>
+      <password>Stud2024!</password>
+      <role>student</role>
+      <isPaid>true</isPaid>
+    </member>
+    <member>
+      <email>morozov.dmitry@kstu.ru</email>
+      <name>Морозов Дмитрий Андреевич</name>
+      <password>Stud2024!</password>
+      <role>student</role>
+      <isPaid>false</isPaid>
+    </member>
+    <member>
+      <email>smirnova.elena@kstu.ru</email>
+    </member>
+  </members>
+</group>

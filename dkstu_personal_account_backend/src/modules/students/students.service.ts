@@ -17,8 +17,6 @@ import { GroupSemesterDiscipline } from '../groups/entities/group-semester-disci
 import { PortfolioCategory } from './enums/portfolio-category.enum';
 import { GradeValue } from './enums/grade-value.enum';
 
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-const archiver = require('archiver') as any;
 
 const NUMERIC_GRADES: Partial<Record<GradeValue, number>> = {
   [GradeValue.EXCELLENT]: 5,
@@ -210,55 +208,6 @@ export class StudentsService {
     return this.portfolioRepo.save(item);
   }
 
-  async downloadPortfolio(
-    studentId: string,
-    res: Response,
-    category?: PortfolioCategory,
-    dateFrom?: string,
-    dateTo?: string,
-  ): Promise<void> {
-    const qb = this.portfolioRepo
-      .createQueryBuilder('p')
-      .where('p.studentId = :studentId', { studentId })
-      .andWhere('p.filePath IS NOT NULL');
-
-    if (category) qb.andWhere('p.category = :category', { category });
-
-    if (dateFrom) {
-      qb.andWhere('p.createdAt >= :dateFrom', { dateFrom: new Date(dateFrom) });
-    }
-    if (dateTo) {
-      const to = new Date(dateTo);
-      to.setHours(23, 59, 59, 999);
-      qb.andWhere('p.createdAt <= :dateTo', { dateTo: to });
-    }
-
-    const items = await qb.orderBy('p.createdAt', 'ASC').getMany();
-    const existing = items.filter((i) => i.filePath && fs.existsSync(i.filePath));
-
-    if (existing.length === 0) {
-      throw new NotFoundException('Нет файлов по указанным фильтрам');
-    }
-
-    res.setHeader('Content-Type', 'application/zip');
-    res.setHeader('Content-Disposition', 'attachment; filename="portfolio.zip"');
-
-    const archive = archiver('zip', { zlib: { level: 6 } });
-    archive.on('error', (err) => { throw err; });
-    archive.pipe(res);
-
-    // Если несколько файлов с одинаковым именем — добавляем порядковый номер
-    const usedNames = new Map<string, number>();
-    for (const item of existing) {
-      const base = item.fileName || path.basename(item.filePath!);
-      const count = usedNames.get(base) ?? 0;
-      usedNames.set(base, count + 1);
-      const archiveName = count === 0 ? base : `${count + 1}_${base}`;
-      archive.file(item.filePath!, { name: archiveName });
-    }
-
-    await archive.finalize();
-  }
 
   async servePortfolioFile(
     studentId: string,

@@ -318,15 +318,24 @@ export default function AdminUsersPage() {
     loadUsers(roleFilter);
   }, [roleFilter]);
 
-  const filteredUsers = query.trim()
+  const [debouncedQuery, setDebouncedQuery] = useState('');
+  const queryDebounceRef = useRef(null);
+
+  useEffect(() => {
+    if (queryDebounceRef.current) clearTimeout(queryDebounceRef.current);
+    queryDebounceRef.current = setTimeout(() => setDebouncedQuery(query), 1000);
+    return () => clearTimeout(queryDebounceRef.current);
+  }, [query]);
+
+  const filteredUsers = debouncedQuery.trim()
     ? users.filter((u) => {
-        const q = query.trim().toLowerCase();
+        const q = debouncedQuery.trim().toLowerCase();
         return (
           u.fullName?.toLowerCase().includes(q) ||
           u.email?.toLowerCase().includes(q)
         );
       })
-    : users;
+    : [];
 
   const handleSelect = (user) => {
     setSelectedId(user.id);
@@ -439,7 +448,7 @@ export default function AdminUsersPage() {
         <ImportResult result={importResult} onClose={() => setImportResult(null)} />
       )}
 
-      <div className={styles.roleTabs}>
+      {/* <div className={styles.roleTabs}>
         {ROLES.map((r) => (
           <button
             key={r.value}
@@ -449,7 +458,7 @@ export default function AdminUsersPage() {
             {r.label}
           </button>
         ))}
-      </div>
+      </div> */}
 
       <div className={styles.splitLayout}>
         <div className={styles.leftPanel}>
@@ -464,7 +473,10 @@ export default function AdminUsersPage() {
           </div>
           <div className={styles.userList}>
             {loading && <p className={styles.emptyList}>Загрузка...</p>}
-            {!loading && filteredUsers.length === 0 && (
+            {!loading && !debouncedQuery.trim() && (
+              <p className={styles.emptyList}>Введите имя или email для поиска</p>
+            )}
+            {!loading && debouncedQuery.trim() && filteredUsers.length === 0 && (
               <p className={styles.emptyList}>Пользователей не найдено</p>
             )}
             {!loading &&

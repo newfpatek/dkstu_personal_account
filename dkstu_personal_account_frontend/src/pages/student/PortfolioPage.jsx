@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { getPortfolio, uploadPortfolioItem, deletePortfolioItem, downloadPortfolio, fetchPortfolioFile } from '../../api/students';
+import { getPortfolio, uploadPortfolioItem, deletePortfolioItem, fetchPortfolioFile } from '../../api/students';
 import { formatDateShort as formatDate } from '../../utils/date';
 import { useToast } from '../../contexts/ToastContext';
 import { getErrorMessage } from '../../utils/error';
@@ -22,6 +22,8 @@ const CATEGORY_COLORS = {
   sports: '#d97706',
   cultural: '#db2777',
 };
+
+const PAGE_SIZE = 10;
 
 function formatSize(bytes) {
   if (!bytes) return '';
@@ -47,6 +49,45 @@ function openBlob(data, contentType, fileName, inline) {
   }
 }
 
+function getPageNumbers(current, total) {
+  if (total <= 7) return Array.from({ length: total }, (_, i) => i + 1);
+  const pages = [1];
+  if (current > 3) pages.push('...');
+  for (let i = Math.max(2, current - 1); i <= Math.min(total - 1, current + 1); i++) {
+    pages.push(i);
+  }
+  if (current < total - 2) pages.push('...');
+  pages.push(total);
+  return pages;
+}
+
+function Pagination({ page, totalPages, onPageChange }) {
+  if (totalPages <= 1) return null;
+  return (
+    <div className={styles.pagination}>
+      <button
+        className={styles.pageBtn}
+        disabled={page === 1}
+        onClick={() => onPageChange(page - 1)}
+      >‹</button>
+      {getPageNumbers(page, totalPages).map((p, i) =>
+        p === '...'
+          ? <span key={`el-${i}`} className={styles.pageEllipsis}>…</span>
+          : <button
+              key={p}
+              className={`${styles.pageBtn} ${p === page ? styles.pageActive : ''}`}
+              onClick={() => onPageChange(p)}
+            >{p}</button>
+      )}
+      <button
+        className={styles.pageBtn}
+        disabled={page === totalPages}
+        onClick={() => onPageChange(page + 1)}
+      >›</button>
+    </div>
+  );
+}
+
 export default function PortfolioPage() {
   const { showToast } = useToast();
   const [items, setItems] = useState([]);
@@ -55,16 +96,14 @@ export default function PortfolioPage() {
   const [loadError, setLoadError] = useState(false);
   const [showForm, setShowForm] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [uploadError, setUploadError] = useState('');
   const [deletingId, setDeletingId] = useState(null);
   const [fileLoadingId, setFileLoadingId] = useState(null);
   const [search, setSearch] = useState('');
+  const [page, setPage] = useState(1);
 
   const [form, setForm] = useState({ title: '', category: 'academic', description: '' });
   const fileRef = useRef(null);
-
-  const [showDownload, setShowDownload] = useState(false);
-  const [dlForm, setDlForm] = useState({ category: '', dateFrom: '', dateTo: '' });
-  const [downloading, setDownloading] = useState(false);
 
   const load = (cat) => {
     setLoading(true);
@@ -78,16 +117,12 @@ export default function PortfolioPage() {
       .finally(() => setLoading(false));
   };
 
-  useEffect(() => {
-    load(category);
-  }, [category]);
+  useEffect(() => { load(category); }, [category]);
+  useEffect(() => { setPage(1); }, [category, search]);
 
   const handleUpload = async (e) => {
     e.preventDefault();
-    if (!form.title.trim()) {
-      setUploadError('Введите название');
-      return;
-    }
+    if (!form.title.trim()) { setUploadError('Введите название'); return; }
 
     const fd = new FormData();
     fd.append('title', form.title.trim());
@@ -123,42 +158,11 @@ export default function PortfolioPage() {
     }
   };
 
-  const handleDownload = async (e) => {
-    e.preventDefault();
-    setDownloading(true);
-    setDlError('');
-    try {
-      const params = {};
-      if (dlForm.category) params.category = dlForm.category;
-      if (dlForm.dateFrom) params.dateFrom = dlForm.dateFrom;
-      if (dlForm.dateTo) params.dateTo = dlForm.dateTo;
-
-      const res = await downloadPortfolio(params);
-      const url = URL.createObjectURL(new Blob([res.data], { type: 'application/zip' }));
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = 'portfolio.zip';
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-      setShowDownload(false);
-    } catch (err) {
-      const msg = err.response?.status === 404
-        ? 'Нет файлов по указанным фильтрам'
-        : getErrorMessage(err, 'Ошибка при скачивании архива');
-      showToast(msg);
-    } finally {
-      setDownloading(false);
-    }
-  };
-
   const handleFileAction = async (item, inline) => {
     setFileLoadingId(item.id);
     try {
       const res = await fetchPortfolioFile(item.id, inline);
-      const contentType = res.headers['content-type'];
-      openBlob(res.data, contentType, item.fileName, inline);
+      openBlob(res.data, res.headers['content-type'], item.fileName, inline);
     } catch (err) {
       showToast(getErrorMessage(err, 'Не удалось открыть файл'));
     } finally {
@@ -166,62 +170,22 @@ export default function PortfolioPage() {
     }
   };
 
+  const q = search.trim().toLowerCase();
+  const filtered = q
+    ? items.filter((i) => i.title.toLowerCase().includes(q) || (i.description || '').toLowerCase().includes(q))
+    : items;
+  const totalPages = Math.ceil(filtered.length / PAGE_SIZE) || 1;
+  const currentPage = Math.min(page, totalPages);
+  const paginated = filtered.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
+
   return (
     <div>
       <div className={styles.header}>
         <h1 className={s.pageTitle} style={{ margin: 0 }}>Портфолио</h1>
-        <div className={styles.headerBtns}>
-          <button
-            className={styles.downloadBtn}
-            onClick={() => { setShowDownload((v) => !v); setDlError(''); }}
-          >
-            {showDownload ? 'Отмена' : '↓ Скачать архивом'}
-          </button>
-          <button className={styles.addBtn} onClick={() => setShowForm((v) => !v)}>
-            {showForm ? 'Отмена' : '+ Добавить'}
-          </button>
-        </div>
+        <button className={styles.addBtn} onClick={() => setShowForm((v) => !v)}>
+          {showForm ? 'Отмена' : '+ Добавить'}
+        </button>
       </div>
-
-      {showDownload && (
-        <form className={styles.form} onSubmit={handleDownload}>
-          <div className={styles.formRow}>
-            <label className={styles.formLabel}>Категория</label>
-            <select
-              className={styles.select}
-              value={dlForm.category}
-              onChange={(e) => setDlForm({ ...dlForm, category: e.target.value })}
-            >
-              {CATEGORIES.map((c) => (
-                <option key={c.value} value={c.value}>{c.label}</option>
-              ))}
-            </select>
-          </div>
-          <div className={styles.dateRow}>
-            <div className={styles.formRow}>
-              <label className={styles.formLabel}>Дата с</label>
-              <input
-                type="date"
-                className={styles.input}
-                value={dlForm.dateFrom}
-                onChange={(e) => setDlForm({ ...dlForm, dateFrom: e.target.value })}
-              />
-            </div>
-            <div className={styles.formRow}>
-              <label className={styles.formLabel}>Дата по</label>
-              <input
-                type="date"
-                className={styles.input}
-                value={dlForm.dateTo}
-                onChange={(e) => setDlForm({ ...dlForm, dateTo: e.target.value })}
-              />
-            </div>
-          </div>
-          <button className={styles.submitBtn} type="submit" disabled={downloading}>
-            {downloading ? 'Формируем архив...' : 'Скачать ZIP'}
-          </button>
-        </form>
-      )}
 
       {showForm && (
         <form className={styles.form} onSubmit={handleUpload}>
@@ -266,6 +230,8 @@ export default function PortfolioPage() {
             <span style={{ fontSize: 12, color: 'var(--text)', opacity: 0.55 }}>Максимальный размер: 25 МБ</span>
           </div>
 
+          {uploadError && <p className={s.errorMsg}>{uploadError}</p>}
+
           <button className={styles.submitBtn} type="submit" disabled={uploading}>
             {uploading ? 'Загружаем...' : 'Сохранить'}
           </button>
@@ -294,81 +260,65 @@ export default function PortfolioPage() {
 
       {loading && <p className={s.empty}>Загрузка...</p>}
 
-      {!loading && !loadError && items.length === 0 && (
+      {!loading && !loadError && filtered.length === 0 && (
         <div className={styles.emptyBox}>
-          <p>Нет записей в портфолио</p>
-          {category && (
-            <p style={{ marginTop: 4, fontSize: 13 }}>
-              Попробуйте выбрать другую категорию
-            </p>
+          <p>{search.trim() ? `Ничего не найдено по запросу «${search.trim()}»` : 'Нет записей в портфолио'}</p>
+          {!search.trim() && category && (
+            <p style={{ marginTop: 4, fontSize: 13 }}>Попробуйте выбрать другую категорию</p>
           )}
         </div>
       )}
 
-      {!loading && !loadError && items.length > 0 && (() => {
-        const q = search.trim().toLowerCase();
-        const visible = q
-          ? items.filter(
-              (i) =>
-                i.title.toLowerCase().includes(q) ||
-                (i.description || '').toLowerCase().includes(q),
-            )
-          : items;
-        return (
-          <>
-            {visible.length === 0 && (
-              <p className={s.empty}>Ничего не найдено по запросу «{search.trim()}»</p>
-            )}
-            <div className={styles.list}>
-              {visible.map((item) => (
-            <div key={item.id} className={styles.card}>
-              <div className={styles.cardLeft}>
-                <span
-                  className={styles.categoryTag}
-                  style={{ background: `${CATEGORY_COLORS[item.category]}18`, color: CATEGORY_COLORS[item.category] }}
-                >
-                  {CATEGORIES.find((c) => c.value === item.category)?.label || item.category}
-                </span>
-                <span className={styles.cardTitle}>{item.title}</span>
-                {item.description && (
-                  <span className={styles.cardDesc}>{item.description}</span>
-                )}
-                <div className={styles.cardMeta}>
-                  <span>{formatDate(item.createdAt)}</span>
+      {!loading && !loadError && filtered.length > 0 && (
+        <>
+          <Pagination
+            page={currentPage}
+            totalPages={totalPages}
+            onPageChange={setPage}
+          />
+          <div className={styles.list}>
+            {paginated.map((item) => (
+              <div key={item.id} className={styles.card}>
+                <div className={styles.cardLeft}>
+                  <span
+                    className={styles.categoryTag}
+                    style={{ background: `${CATEGORY_COLORS[item.category]}18`, color: CATEGORY_COLORS[item.category] }}
+                  >
+                    {CATEGORIES.find((c) => c.value === item.category)?.label || item.category}
+                  </span>
+                  <span className={styles.cardTitle}>{item.title}</span>
+                  {item.description && <span className={styles.cardDesc}>{item.description}</span>}
+                  <div className={styles.cardMeta}>
+                    <span>{formatDate(item.createdAt)}</span>
+                    {item.fileName && item.fileSize && (
+                      <span className={styles.fileInfo}>{formatSize(item.fileSize)}</span>
+                    )}
+                  </div>
+                </div>
+
+                <div className={styles.cardActions}>
                   {item.fileName && (
-                    <span className={styles.fileInfo}>
-                      {item.fileName} {item.fileSize ? `(${formatSize(item.fileSize)})` : ''}
-                    </span>
+                    <button
+                      className={styles.fileBtn}
+                      onClick={() => handleFileAction(item, true)}
+                      disabled={fileLoadingId === item.id}
+                    >
+                      {fileLoadingId === item.id ? '...' : 'Открыть'}
+                    </button>
                   )}
+                  <button
+                    className={styles.deleteBtn}
+                    onClick={() => handleDelete(item.id)}
+                    disabled={deletingId === item.id}
+                  >
+                    {deletingId === item.id ? '...' : '✕'}
+                  </button>
                 </div>
               </div>
-
-              <div className={styles.cardActions}>
-                {item.fileName && (
-                  <button
-                    className={styles.fileBtn}
-                    onClick={() => handleFileAction(item, true)}
-                    disabled={fileLoadingId === item.id}
-                    title="Открыть в браузере"
-                  >
-                    Открыть
-                  </button>
-                )}
-                <button
-                  className={styles.deleteBtn}
-                  onClick={() => handleDelete(item.id)}
-                  disabled={deletingId === item.id}
-                  title="Удалить"
-                >
-                  {deletingId === item.id ? '...' : '✕'}
-                </button>
-              </div>
-            </div>
-              ))}
-            </div>
-          </>
-        );
-      })()}
+            ))}
+          </div>
+        </>
+      )}
     </div>
   );
 }

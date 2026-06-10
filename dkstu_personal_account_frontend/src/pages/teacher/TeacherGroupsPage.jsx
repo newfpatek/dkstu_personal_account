@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { getGroups, getGroupById } from '../../api/teacher';
 import { useToast } from '../../contexts/ToastContext';
 import { getErrorMessage } from '../../utils/error';
@@ -28,10 +28,12 @@ export default function TeacherGroupsPage() {
   const { showToast } = useToast();
   const [groups, setGroups] = useState([]);
   const [search, setSearch] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
   const [selectedId, setSelectedId] = useState(null);
   const [detail, setDetail] = useState(null);
   const [loadingGroups, setLoadingGroups] = useState(true);
   const [loadingDetail, setLoadingDetail] = useState(false);
+  const searchDebounceRef = useRef(null);
 
   useEffect(() => {
     getGroups()
@@ -39,6 +41,12 @@ export default function TeacherGroupsPage() {
       .catch((err) => showToast(getErrorMessage(err, 'Не удалось загрузить группы')))
       .finally(() => setLoadingGroups(false));
   }, []);
+
+  useEffect(() => {
+    if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current);
+    searchDebounceRef.current = setTimeout(() => setDebouncedSearch(search), 1000);
+    return () => clearTimeout(searchDebounceRef.current);
+  }, [search]);
 
   useEffect(() => {
     if (!selectedId) return;
@@ -50,8 +58,8 @@ export default function TeacherGroupsPage() {
       .finally(() => setLoadingDetail(false));
   }, [selectedId]);
 
-  const q = search.trim().toLowerCase();
-  const filteredGroups = q ? groups.filter((g) => g.name.toLowerCase().includes(q)) : groups;
+  const q = debouncedSearch.trim().toLowerCase();
+  const filteredGroups = q ? groups.filter((g) => g.name.toLowerCase().includes(q)) : [];
 
   const students = detail?.members.filter((m) => m.role === 'student') ?? [];
   const others = detail?.members.filter((m) => m.role !== 'student') ?? [];
@@ -74,7 +82,10 @@ export default function TeacherGroupsPage() {
           </div>
           <div className={styles.groupList}>
             {loadingGroups && <p className={styles.emptyList}>Загрузка...</p>}
-            {!loadingGroups && filteredGroups.length === 0 && (
+            {!loadingGroups && !q && (
+              <p className={styles.emptyList}>Введите название группы для поиска</p>
+            )}
+            {!loadingGroups && q && filteredGroups.length === 0 && (
               <p className={styles.emptyList}>Групп не найдено</p>
             )}
             {!loadingGroups && filteredGroups.map((g) => (

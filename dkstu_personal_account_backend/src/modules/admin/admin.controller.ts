@@ -169,6 +169,43 @@ export class AdminController {
     return this.adminService.removeGroupSemesterDiscipline(id);
   }
 
+  // ─── Grades ──────────────────────────────────────────────────────────────
+
+  @Post('grades/import')
+  @UseInterceptors(FileInterceptor('file', { storage: memoryStorage() }))
+  importGrades(@UploadedFile() file: Express.Multer.File) {
+    if (!file) return { error: 'Файл не загружен' };
+    return this.adminService.importGrades(file.buffer, file.mimetype, file.originalname);
+  }
+
+  @Post('grades')
+  upsertGrades(@Body() body: { disciplineId: string; semester: number; academicYear: string; grades: Array<{ studentId: string; gradeValue: string | null }> }) {
+    if (!body.disciplineId || !body.semester || !body.academicYear) {
+      throw new BadRequestException('disciplineId, semester, academicYear обязательны');
+    }
+    return this.adminService.upsertGrades(body);
+  }
+
+  @Get('grades')
+  getGradesForGroup(
+    @Query('groupId') groupId: string,
+    @Query('disciplineId') disciplineId: string,
+    @Query('semester') semester: string,
+    @Query('academicYear') academicYear: string,
+  ) {
+    if (!groupId || !disciplineId || !semester || !academicYear) {
+      throw new BadRequestException('groupId, disciplineId, semester, academicYear обязательны');
+    }
+    return this.adminService.getGradesForGroup(groupId, disciplineId, parseInt(semester, 10), academicYear);
+  }
+
+  @Post('disciplines')
+  createDiscipline(@Body() body: { name: string; type?: string }) {
+    if (!body.name?.trim()) throw new BadRequestException('Название дисциплины обязательно');
+    const disciplineType = body.type === 'pass_fail' ? 'pass_fail' : 'exam';
+    return this.adminService.createDiscipline(body.name.trim(), disciplineType as any);
+  }
+
   @Get('disciplines')
   getDisciplines() {
     return this.adminService.getDisciplines();

@@ -46,11 +46,6 @@ export const uploadPortfolioItem = (formData) =>
 export const deletePortfolioItem = (id) =>
   apiClient.delete(`/students/me/portfolio/${id}`);
 
-export const downloadPortfolio = (params) =>
-  apiClient.get('/students/me/portfolio/download', {
-    params,
-    responseType: 'blob',
-  });
 
 export const fetchPortfolioFile = (itemId, inline = false) =>
   apiClient.get(`/students/me/portfolio/${itemId}/file`, {

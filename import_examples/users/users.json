@@ -1,0 +1,47 @@
+[
+  {
+    "name": "Иванов Иван Иванович",
+    "email": "ivanov.ivan@kstu.ru",
+    "role": "student",
+    "isPaid": false
+  },
+  {
+    "name": "Петрова Анна Сергеевна",
+    "email": "petrova.anna@kstu.ru",
+    "role": "student",
+    "isPaid": false
+  },
+  {
+    "name": "Сидоров Алексей Николаевич",
+    "email": "sidorov.alex@kstu.ru",
+    "role": "student",
+    "isPaid": false
+  },
+  {
+    "name": "Козлова Мария Дмитриевна",
+    "email": "kozlova.maria@kstu.ru",
+    "role": "student",
+    "isPaid": true
+  },
+  {
+    "name": "Морозов Дмитрий Андреевич",
+    "email": "morozov.dmitry@kstu.ru",
+    "role": "student",
+    "isPaid": false
+  },
+  {
+    "name": "Смирнова Елена Викторовна",
+    "email": "smirnova.elena@kstu.ru",
+    "role": "teacher"
+  },
+  {
+    "name": "Волков Андрей Петрович",
+    "email": "volkov.andrey@kstu.ru",
+    "role": "teacher"
+  },
+  {
+    "name": "Новикова Ольга Ивановна",
+    "email": "novikova.olga@kstu.ru",
+    "role": "staff"
+  }
+]

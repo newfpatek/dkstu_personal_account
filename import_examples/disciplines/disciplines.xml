@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<groups>
+  <group>
+    <name>ИВТ-21-1</name>
+    <semester>3</semester>
+    <academicYear>2025-2026</academicYear>
+    <disciplines>
+      <discipline type="exam">Математический анализ</discipline>
+      <discipline type="exam">Теория вероятностей и математическая статистика</discipline>
+      <discipline type="exam">Базы данных</discipline>
+      <discipline type="exam">Операционные системы</discipline>
+      <discipline type="exam">Веб-разработка</discipline>
+      <discipline type="pass_fail">Иностранный язык</discipline>
+    </disciplines>
+  </group>
+</groups>

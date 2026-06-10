@@ -421,6 +421,12 @@
   color: var(--accent);
 }
 
+.chipType {
+  font-size: 10px;
+  opacity: 0.6;
+  font-weight: 400;
+}
+
 .chipRemove {
   background: none;
   border: none;
@@ -456,6 +462,96 @@
   color: #dc2626;
   font-size: 14px;
   margin-bottom: 16px;
+}
+
+.importSummary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.importClose {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 14px;
+  color: inherit;
+  opacity: 0.6;
+  padding: 0 4px;
+  line-height: 1;
+}
+
+.importClose:hover {
+  opacity: 1;
+}
+
+.importErrors {
+  margin: 8px 0 0;
+  padding-left: 18px;
+  font-size: 13px;
+  opacity: 0.85;
+}
+
+.importErrors li {
+  margin-bottom: 2px;
+}
+
+.passwordsBlock {
+  margin-top: 14px;
+  border-top: 1px solid rgba(22, 163, 74, 0.25);
+  padding-top: 12px;
+}
+
+.passwordsHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+  font-weight: 600;
+  font-size: 13px;
+}
+
+.btnDownload {
+  padding: 5px 12px;
+  border: 1px solid #15803d;
+  border-radius: 5px;
+  background: transparent;
+  color: #15803d;
+  font-size: 13px;
+  cursor: pointer;
+  font-weight: 500;
+  transition: background 0.15s;
+}
+
+.btnDownload:hover {
+  background: rgba(22, 163, 74, 0.12);
+}
+
+.passwordsTable {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.passwordsTable th,
+.passwordsTable td {
+  text-align: left;
+  padding: 6px 10px;
+  border-bottom: 1px solid rgba(22, 163, 74, 0.15);
+}
+
+.passwordsTable th {
+  font-weight: 600;
+  opacity: 0.75;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}
+
+.passwordCell {
+  font-weight: 600;
+  letter-spacing: 0.5px;
 }
 
 /* Modal */
