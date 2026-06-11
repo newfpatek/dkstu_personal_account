@@ -101,51 +101,55 @@ function UserForm({ initial, onSave, onCancel, loading, error }) {
   return (
     <form onSubmit={handleSubmit} className={styles.form}>
       <div className={styles.formRow}>
-        <label className={styles.label}>ФИО</label>
+        <label className={styles.label}>ФИО<span style={{ color: '#dc2626' }}> *</span></label>
         <input
           className={styles.input}
           value={form.name}
           onChange={(e) => set('name', e.target.value)}
           required
-          placeholder="Иванов Иван Иванович"
+          placeholder="ФИО..."
+          autoComplete="off"
         />
       </div>
       <div className={styles.formRow}>
-        <label className={styles.label}>Телефон (логин, формат +71234567890)</label>
+        <label className={styles.label}>Телефон<span style={{ color: '#dc2626' }}> *</span></label>
         <input
           className={styles.input}
           type="tel"
           value={form.phone}
           onChange={(e) => set('phone', e.target.value)}
           required={!initial}
-          placeholder="+71234567890"
+          placeholder="Номер телефона... (формат: +71234567890)"
+          autoComplete="off"
         />
       </div>
       <div className={styles.formRow}>
-        <label className={styles.label}>Email (необязательно)</label>
+        <label className={styles.label}>Электронная почта</label>
         <input
           className={styles.input}
           type="email"
           value={form.email}
           onChange={(e) => set('email', e.target.value)}
-          placeholder="example@mail.ru"
+          placeholder="Email... (формат: example@mail.ru)"
+          autoComplete="off"
         />
       </div>
       {initial && (
         <div className={styles.formRow}>
-          <label className={styles.label}>Новый пароль (оставьте пустым, чтобы не менять)</label>
+          <label className={styles.label}>Новый пароль</label>
           <input
             className={styles.input}
             type="password"
             value={form.password}
             onChange={(e) => set('password', e.target.value)}
-            placeholder="Не менять"
+            placeholder="Если не хотите менять пароль, оставьте поле пустым"
+            autoComplete="new-password"
           />
         </div>
       )}
       {!initial && (
         <div className={styles.formRow}>
-          <label className={styles.label}>Роль</label>
+          <label className={styles.label}>Роль пользователя</label>
           <select
             className={styles.select}
             value={form.role}
@@ -169,8 +173,9 @@ function UserForm({ initial, onSave, onCancel, loading, error }) {
               value={form.gradeBook || ''}
               onChange={(e) => set('gradeBook', e.target.value)}
               required={!initial}
-              placeholder="12345"
+              placeholder="Номер зачетной книжки... (формат: 12345)"
               maxLength={50}
+              autoComplete="off"
             />
           </div>
           <div className={styles.formRow}>
@@ -180,7 +185,7 @@ function UserForm({ initial, onSave, onCancel, loading, error }) {
                 checked={form.isPaid}
                 onChange={(e) => set('isPaid', e.target.checked)}
               />
-              Платное обучение (контрактник)
+              Студент находится на платном обучении
             </label>
           </div>
         </>
@@ -208,7 +213,12 @@ function UserDetail({ user, onEdit, onDelete }) {
       <div className={styles.profileHeader}>
         <div className={styles.profileAvatar}>{initials}</div>
         <div className={styles.profileInfo}>
-          <span className={styles.profileFullName}>{user.fullName}</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+            <span className={styles.profileFullName}>{user.fullName}</span>
+            {user.groups?.map((g) => (
+              <span key={g.id} className={styles.groupTag}>{g.name}</span>
+            ))}
+          </div>
           <span className={styles.profileEmail}>{user.phone}</span>
           {user.email && <span className={styles.profileEmail}>{user.email}</span>}
           {user.gradeBook && <span className={styles.profileEmail}>Зачетная книжка {user.gradeBook}</span>}
@@ -228,19 +238,6 @@ function UserDetail({ user, onEdit, onDelete }) {
           </div>
         </div>
       </div>
-
-      {user.groups?.length > 0 && (
-        <div style={{ marginBottom: 20 }}>
-          <p className={styles.sectionLabel}>Группы</p>
-          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-            {user.groups.map((g) => (
-              <span key={g.id} className={styles.groupTag}>
-                {g.name}
-              </span>
-            ))}
-          </div>
-        </div>
-      )}
 
       <div className={styles.detailActions}>
         <button className={styles.btnPrimary} onClick={onEdit}>
@@ -268,6 +265,7 @@ function ImportResult({ result, onClose }) {
 
   const handleDownload = () => {
     const rows = result.generatedPasswords.map((r) => ({
+      ФИО: r.fullName,
       Телефон: r.phone,
       Пароль: r.password,
     }));
@@ -301,6 +299,7 @@ function ImportResult({ result, onClose }) {
           <table className={styles.passwordsTable}>
             <thead>
               <tr>
+                <th>ФИО</th>
                 <th>Телефон</th>
                 <th>Пароль</th>
               </tr>
@@ -308,6 +307,7 @@ function ImportResult({ result, onClose }) {
             <tbody>
               {result.generatedPasswords.map((r) => (
                 <tr key={r.phone}>
+                  <td>{r.fullName}</td>
                   <td>{r.phone}</td>
                   <td className={styles.passwordCell}>{r.password}</td>
                 </tr>
@@ -518,6 +518,9 @@ export default function AdminUsersPage() {
                 >
                   <span className={styles.userName}>
                     {u.fullName}
+                    {u.groups?.map((g) => (
+                      <span key={g.id} className={styles.groupTag}>{g.name}</span>
+                    ))}
                     {u.isPaid && <span className={styles.paidTag}>Контракт</span>}
                   </span>
                   <span
@@ -526,7 +529,9 @@ export default function AdminUsersPage() {
                   >
                     {ROLE_LABELS[u.role] || u.role}
                   </span>
-                  <span className={styles.userEmail}>{u.phone}</span>
+                  {(u.email || u.phone) && (
+                    <span className={styles.userEmail}>{u.email || u.phone}</span>
+                  )}
                 </div>
               ))}
           </div>

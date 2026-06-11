@@ -92,10 +92,24 @@ export class AdminService implements OnModuleInit {
     return result;
   }
 
-  async findAllUsers(role?: Role): Promise<Omit<User, 'password'>[]> {
-    const where = role ? { role } : {};
-    const users = await this.userRepo.find({ where, order: { createdAt: 'DESC' } });
-    return users.map(this.sanitize);
+  async findAllUsers(role?: Role): Promise<object[]> {
+    const qb = this.userRepo
+      .createQueryBuilder('u')
+      .leftJoinAndSelect('u.groups', 'g')
+      .orderBy('u.createdAt', 'DESC');
+    if (role) qb.where('u.role = :role', { role });
+    const users = await qb.getMany();
+    return users.map((u) => ({
+      id: u.id,
+      fullName: u.fullName,
+      phone: u.phone,
+      email: u.email,
+      gradeBook: u.gradeBook,
+      role: u.role,
+      isPaid: u.isPaid,
+      createdAt: u.createdAt,
+      groups: (u.groups ?? []).map((g) => ({ id: g.id, name: g.name, year: g.year })),
+    }));
   }
 
   async findUserById(id: string): Promise<Omit<User, 'password'>> {
@@ -156,14 +170,33 @@ export class AdminService implements OnModuleInit {
       relations: { members: true },
       order: { name: 'ASC' },
     });
-    return this.attachGroupRoles(groups);
+    const enriched = await this.attachGroupRoles(groups);
+    const maxSemMap = await this.getGroupMaxSemesters(groups.map((g) => g.id));
+    return enriched.map((g) => ({ ...g, maxSemester: maxSemMap.get(g.id) ?? null }));
   }
 
   async findGroupById(id: string): Promise<any> {
     const group = await this.groupRepo.findOne({ where: { id }, relations: { members: true } });
     if (!group) throw new NotFoundException('Группа не найдена');
     const [enriched] = await this.attachGroupRoles([group]);
-    return enriched;
+    const maxSemMap = await this.getGroupMaxSemesters([id]);
+    return { ...enriched, maxSemester: maxSemMap.get(id) ?? null };
+  }
+
+  private async getGroupMaxSemesters(groupIds: string[]): Promise<Map<string, number | null>> {
+    if (!groupIds.length) return new Map();
+    const rows = await this.groupSemDisciplineRepo
+      .createQueryBuilder('gsd')
+      .select('gsd.groupId', 'groupId')
+      .addSelect('MAX(gsd.semester)', 'maxSem')
+      .where('gsd.groupId IN (:...groupIds)', { groupIds })
+      .groupBy('gsd.groupId')
+      .getRawMany();
+    const map = new Map<string, number | null>();
+    for (const row of rows) {
+      map.set(row.groupId, row.maxSem != null ? Number(row.maxSem) : null);
+    }
+    return map;
   }
 
   private async attachGroupRoles(groups: Group[]): Promise<any[]> {
@@ -355,6 +388,7 @@ export class AdminService implements OnModuleInit {
     originalname: string,
   ): Promise<{ created: number; skipped: number; errors: string[] }> {
     let records: Array<{
+      name?: string;
       email?: string;
       phone?: string;
       gradeBook?: string;
@@ -376,6 +410,7 @@ export class AdminService implements OnModuleInit {
         const rows = this.readExcelSheet(buffer, 0);
         records = rows
           .map((row) => ({
+            name: this.excelStr(row, 'ФИО', 'Имя', 'name') || undefined,
             phone: this.excelStr(row, 'Номер телефона', 'Телефон', 'phone') || undefined,
             type: this.excelStr(row, 'Тип', 'type'),
             amount: this.excelStr(row, 'Сумма', 'amount') ? Number(this.excelStr(row, 'Сумма', 'amount')) : undefined,
@@ -397,9 +432,9 @@ export class AdminService implements OnModuleInit {
     const errors: string[] = [];
 
     for (const rec of records) {
-      const identifier = rec.gradeBook ?? rec.phone ?? rec.email ?? '';
+      const label = rec.name ?? rec.gradeBook ?? rec.phone ?? rec.email ?? '(без имени)';
       if ((!rec.email && !rec.phone && !rec.gradeBook) || !rec.type || !rec.periodStart) {
-        errors.push('Пропущена запись: обязательны тип, дата начала и хотя бы один из: email, телефон, зачётная книжка');
+        errors.push(`${label}: пропущена запись — обязательны тип, дата начала и хотя бы один из: телефон, email, зачётная книжка`);
         skipped++;
         continue;
       }
@@ -410,36 +445,40 @@ export class AdminService implements OnModuleInit {
           ? await this.userRepo.findOne({ where: { phone: rec.phone } })
           : await this.userRepo.findOne({ where: { email: rec.email } });
       if (!student) {
-        errors.push(`${identifier}: пользователь не найден`);
+        errors.push(`${label}: пользователь не найден в системе`);
         skipped++;
         continue;
       }
+
+      const studentLabel = student.fullName ?? label;
 
       if (student.isPaid) {
-        errors.push(`${identifier}: студент на платной основе, стипендия не назначается`);
+        errors.push(`${studentLabel}: студент обучается на платной основе — стипендия не назначается`);
         skipped++;
         continue;
       }
 
-      const schType = Object.values(ScholarshipType).includes(rec.type as ScholarshipType)
-        ? (rec.type as ScholarshipType)
+      const normalizedType = this.normalizeScholarshipType(rec.type);
+      const schType = Object.values(ScholarshipType).includes(normalizedType as ScholarshipType)
+        ? (normalizedType as ScholarshipType)
         : null;
       if (!schType) {
-        errors.push(`${identifier}: неизвестный тип стипендии "${rec.type}"`);
+        errors.push(`${studentLabel}: неизвестный тип стипендии "${rec.type}"`);
         skipped++;
         continue;
       }
 
       const debtCount = await this.gradeRecordRepo.count({ where: { studentId: student.id, isDebt: true } });
       if (debtCount > 0 && schType !== ScholarshipType.SOCIAL) {
-        errors.push(`${identifier}: у студента есть задолженности — допускается только социальная стипендия`);
+        errors.push(`${studentLabel}: есть академические задолженности (${debtCount} шт.) — допускается только социальная стипендия`);
         skipped++;
         continue;
       }
 
+      const normalizedDir = this.normalizeDirection(rec.direction);
       const direction =
-        rec.direction && Object.values(EnhancedDirection).includes(rec.direction as EnhancedDirection)
-          ? (rec.direction as EnhancedDirection)
+        normalizedDir && Object.values(EnhancedDirection).includes(normalizedDir as EnhancedDirection)
+          ? (normalizedDir as EnhancedDirection)
           : null;
 
       let amount = rec.amount !== undefined ? Number(rec.amount) : undefined;
@@ -447,7 +486,7 @@ export class AdminService implements OnModuleInit {
         try {
           amount = await this.resolveBaseAmount(schType, direction);
         } catch {
-          errors.push(`${identifier}: базовый размер для типа "${schType}"${direction ? ` (${direction})` : ''} не задан, либо укажите базовое значение степндии, либо укажите сумму в файле`);
+          errors.push(`${studentLabel}: базовый размер для типа "${rec.type}"${direction ? ` (направление: ${normalizedDir})` : ''} не задан — укажите сумму в файле или задайте базовый размер в разделе «Стипендии»`);
           skipped++;
           continue;
         }
@@ -471,11 +510,11 @@ export class AdminService implements OnModuleInit {
   }
 
   private parseScholarshipsXml(xml: string): Array<{
-    email?: string; phone?: string; gradeBook?: string; type: string; amount?: number;
+    name?: string; email?: string; phone?: string; gradeBook?: string; type: string; amount?: number;
     periodStart: string; periodEnd?: string; direction?: string;
   }> {
     const records: Array<{
-      email?: string; phone?: string; gradeBook?: string; type: string; amount?: number;
+      name?: string; email?: string; phone?: string; gradeBook?: string; type: string; amount?: number;
       periodStart: string; periodEnd?: string; direction?: string;
     }> = [];
     const blocks = xml.match(/<scholarship>([\s\S]*?)<\/scholarship>/g) ?? [];
@@ -492,6 +531,7 @@ export class AdminService implements OnModuleInit {
       if ((!email && !phone && !gradeBook) || !type || !periodStart) continue;
       const amountStr = get('amount');
       records.push({
+        name: get('name') ?? get('fullName'),
         email, phone, gradeBook, type, periodStart,
         periodEnd: get('periodEnd'),
         direction: get('direction'),
@@ -506,8 +546,8 @@ export class AdminService implements OnModuleInit {
   }
 
   async createDiscipline(name: string, disciplineType: DisciplineType): Promise<Discipline> {
-    const existing = await this.disciplineRepo.findOne({ where: { name } });
-    if (existing) throw new ConflictException(`Дисциплина "${name}" уже существует`);
+    const existing = await this.disciplineRepo.findOne({ where: { name, disciplineType } });
+    if (existing) throw new ConflictException(`Дисциплина "${name}" (${disciplineType}) уже существует`);
     return this.disciplineRepo.save(this.disciplineRepo.create({ name, disciplineType }));
   }
 
@@ -555,8 +595,10 @@ export class AdminService implements OnModuleInit {
         continue;
       }
 
+      const normalizedGrade = this.normalizeGradeValue(g.gradeValue);
+
       if (existing) {
-        existing.gradeValue = g.gradeValue as GradeValue;
+        existing.gradeValue = normalizedGrade as GradeValue;
         await this.gradeRecordRepo.save(existing);
       } else {
         await this.gradeRecordRepo.save(
@@ -564,7 +606,7 @@ export class AdminService implements OnModuleInit {
             studentId: g.studentId,
             disciplineId: dto.disciplineId,
             semester: dto.semester,
-            gradeValue: g.gradeValue as GradeValue,
+            gradeValue: normalizedGrade as GradeValue,
           }),
         );
       }
@@ -623,6 +665,8 @@ export class AdminService implements OnModuleInit {
         continue;
       }
 
+      row.grade = this.normalizeGradeValue(row.grade);
+
       const student = await this.userRepo.findOne({ where: { gradeBook: row.gradeBook } });
       if (!student) {
         errors.push(`Зачётная книжка "${row.gradeBook}" не найдена`);
@@ -636,8 +680,8 @@ export class AdminService implements OnModuleInit {
         continue;
       }
 
-      const discType = row.disciplineType === 'pass_fail' ? DisciplineType.PASS_FAIL : DisciplineType.EXAM;
-      let discipline = await this.disciplineRepo.findOne({ where: { name: row.disciplineName } });
+      const discType = this.normalizeDisciplineType(row.disciplineType) === 'pass_fail' ? DisciplineType.PASS_FAIL : DisciplineType.EXAM;
+      let discipline = await this.disciplineRepo.findOne({ where: { name: row.disciplineName, disciplineType: discType } });
       if (!discipline) {
         discipline = await this.disciplineRepo.save(
           this.disciplineRepo.create({ name: row.disciplineName, disciplineType: discType }),
@@ -815,9 +859,9 @@ export class AdminService implements OnModuleInit {
         const discName = disc.name?.trim();
         if (!discName) continue;
 
-        const discType = disc.type === 'pass_fail' ? DisciplineType.PASS_FAIL : DisciplineType.EXAM;
+        const discType = this.normalizeDisciplineType(disc.type) === 'pass_fail' ? DisciplineType.PASS_FAIL : DisciplineType.EXAM;
 
-        let discipline = await this.disciplineRepo.findOne({ where: { name: discName } });
+        let discipline = await this.disciplineRepo.findOne({ where: { name: discName, disciplineType: discType } });
         if (!discipline) {
           discipline = await this.disciplineRepo.save(
             this.disciplineRepo.create({ name: discName, disciplineType: discType }),
@@ -894,7 +938,7 @@ export class AdminService implements OnModuleInit {
     let skipped = 0;
     const errors: string[] = [];
     const members: User[] = [];
-    const generatedPasswords: Array<{ phone: string; password: string }> = [];
+    const generatedPasswords: Array<{ fullName: string; phone: string; password: string }> = [];
 
     for (const rec of groupData.members ?? []) {
       if (!rec.phone) {
@@ -930,7 +974,7 @@ export class AdminService implements OnModuleInit {
             isPaid: rec.isPaid ?? false,
           }),
         );
-        if (!rec.password) generatedPasswords.push({ phone: rec.phone, password: plainPassword });
+        if (!rec.password) generatedPasswords.push({ fullName: rec.name, phone: rec.phone, password: plainPassword });
         created++;
       }
 
@@ -950,7 +994,7 @@ export class AdminService implements OnModuleInit {
     buffer: Buffer,
     mimetype: string,
     originalname: string,
-  ): Promise<{ created: number; skipped: number; errors: string[]; generatedPasswords: Array<{ phone: string; password: string }> }> {
+  ): Promise<{ created: number; skipped: number; errors: string[]; generatedPasswords: Array<{ fullName: string; phone: string; password: string }> }> {
     let records: Array<{ name: string; phone: string; email?: string; gradeBook?: string; password?: string; role?: string; isPaid?: boolean }>;
 
     try {
@@ -991,7 +1035,7 @@ export class AdminService implements OnModuleInit {
     let created = 0;
     let skipped = 0;
     const errors: string[] = [];
-    const generatedPasswords: Array<{ phone: string; password: string }> = [];
+    const generatedPasswords: Array<{ fullName: string; phone: string; password: string }> = [];
 
     for (const rec of records) {
       if (!rec.name || !rec.phone) {
@@ -1023,7 +1067,7 @@ export class AdminService implements OnModuleInit {
         isPaid: rec.isPaid ?? false,
       });
       await this.userRepo.save(user);
-      if (!rec.password) generatedPasswords.push({ phone: rec.phone, password: plainPassword });
+      if (!rec.password) generatedPasswords.push({ fullName: rec.name, phone: rec.phone, password: plainPassword });
       created++;
     }
 
@@ -1046,7 +1090,7 @@ export class AdminService implements OnModuleInit {
     });
     if (!base) {
       throw new BadRequestException(
-        `Базовый размер для типа "${type}"${direction ? ` (направление: ${direction})` : ''} не задан. Укажите amount или задайте базовый размер.`,
+        `Базовый размер для типа "${type}"${direction ? ` (направление: ${direction})` : ''} не задан. Укажите сумму или задайте базовый размер.`,
       );
     }
     return Number(base.amount);
@@ -1088,6 +1132,59 @@ export class AdminService implements OnModuleInit {
       [chars[i], chars[j]] = [chars[j], chars[i]];
     }
     return chars.join('');
+  }
+
+  private normalizeGradeValue(val: string): string {
+    const map: Record<string, string> = {
+      'отлично':                 'excellent',
+      'хорошо':                  'good',
+      'удовлетворительно':       'satisfactory',
+      'неудовлетворительно':     'unsatisfactory',
+      'неявка на экзамен':       'absent_exam',
+      'не явился на экзамен':    'absent_exam',
+      'зачтено':                 'passed',
+      'зачёт':                   'passed',
+      'зачет':                   'passed',
+      'не зачтено':              'failed',
+      'незачёт':                 'failed',
+      'незачтено':               'failed',
+      'неявка':                  'absent',
+      'не явился':               'absent',
+    };
+    return map[val.trim().toLowerCase()] ?? val.trim();
+  }
+
+  private normalizeDisciplineType(val: string | undefined): string {
+    if (!val) return 'exam';
+    const v = val.trim().toLowerCase();
+    if (v === 'зачёт' || v === 'зачет' || v === 'pass_fail') return 'pass_fail';
+    return 'exam';
+  }
+
+  private normalizeScholarshipType(val: string): string {
+    const map: Record<string, string> = {
+      'академическая': 'academic',
+      'социальная': 'social',
+      'повышенная академическая': 'enhanced_academic',
+      'академическая × 1.4': 'academic_coeff_1_4',
+      'академическая x 1.4': 'academic_coeff_1_4',
+      'академическая × 1.5': 'academic_coeff_1_5',
+      'академическая x 1.5': 'academic_coeff_1_5',
+      'повышенная социальная': 'enhanced_social',
+    };
+    return map[val.trim().toLowerCase()] ?? val.trim();
+  }
+
+  private normalizeDirection(val: string | undefined): string | undefined {
+    if (!val) return undefined;
+    const map: Record<string, string> = {
+      'учебная': 'academic',
+      'научная': 'research',
+      'общественная': 'social',
+      'спортивная': 'sports',
+      'культурная': 'cultural',
+    };
+    return map[val.trim().toLowerCase()] ?? val.trim();
   }
 
   private sanitize(user: User): Omit<User, 'password'> {
@@ -1184,7 +1281,7 @@ export class AdminService implements OnModuleInit {
     let usersAdded = 0;
     let skipped = 0;
     const errors: string[] = [];
-    const generatedPasswords: Array<{ phone: string; password: string }> = [];
+    const generatedPasswords: Array<{ fullName: string; phone: string; password: string }> = [];
 
     for (const row of rows) {
       const fullName  = this.excelStr(row, 'ФИО', 'Имя', 'name');
@@ -1253,7 +1350,7 @@ export class AdminService implements OnModuleInit {
             isPaid,
           }),
         );
-        generatedPasswords.push({ phone, password: plainPassword });
+        generatedPasswords.push({ fullName, phone, password: plainPassword });
         usersCreated++;
       }
 

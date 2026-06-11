@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
-import { getAllGrades, getGradesHistory, getGpa, getDebts, getMyCurrentSemesterPlan } from '../../api/students';
+import { getAllGrades, getGpa, getDebts, getMyCurrentSemesterPlan, getMyGroup } from '../../api/students';
+import { calcCurrentSemester } from '../../utils/semester';
 import { useToast } from '../../contexts/ToastContext';
 import { getErrorMessage } from '../../utils/error';
 import s from './shared.module.css';
@@ -37,7 +38,6 @@ function GradeCell({ value }) {
 export default function GradesPage() {
   const { showToast } = useToast();
   const [tab, setTab] = useState('current');
-  const [history, setHistory] = useState({});
   const [plan, setPlan] = useState(null);
   const [allGrades, setAllGrades] = useState([]);
   const [gpa, setGpa] = useState(null);
@@ -45,14 +45,26 @@ export default function GradesPage() {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
 
+  const [groupYear, setGroupYear] = useState(null);
+  const [maxSemester, setMaxSemester] = useState(null);
+  const [historySemester, setHistorySemester] = useState(null);
+  const [historyPlan, setHistoryPlan] = useState(null);
+  const [historyPlanLoading, setHistoryPlanLoading] = useState(false);
+
   useEffect(() => {
-    Promise.all([getGradesHistory(), getGpa(), getDebts(), getMyCurrentSemesterPlan(), getAllGrades()])
-      .then(([histRes, gpaRes, debtsRes, planRes, allRes]) => {
-        setHistory(histRes.data);
+    Promise.all([getGpa(), getDebts(), getMyCurrentSemesterPlan(), getAllGrades(), getMyGroup()])
+      .then(([gpaRes, debtsRes, planRes, allRes, groupRes]) => {
         setGpa(gpaRes.data.gpa);
         setDebts(debtsRes.data);
         setPlan(planRes.data);
         setAllGrades(allRes.data);
+        const groups = groupRes.data;
+        if (groups && groups.length > 0) {
+          const g = groups[0];
+          setGroupYear(g.year);
+          setMaxSemester(g.maxSemester ?? null);
+          setHistorySemester(calcCurrentSemester(g.year));
+        }
       })
       .catch((err) => {
         showToast(getErrorMessage(err, 'Не удалось загрузить данные'));
@@ -61,9 +73,18 @@ export default function GradesPage() {
       .finally(() => setLoading(false));
   }, []);
 
+  useEffect(() => {
+    if (historySemester == null) return;
+    setHistoryPlanLoading(true);
+    getMyCurrentSemesterPlan(historySemester)
+      .then((res) => setHistoryPlan(res.data))
+      .catch(() => setHistoryPlan(null))
+      .finally(() => setHistoryPlanLoading(false));
+  }, [historySemester]);
+
   const hasPlan = plan && plan.entries && plan.entries.length > 0;
 
-  const semesters = Object.keys(history).map(Number).sort((a, b) => b - a);
+  const autoHistorySem = groupYear ? calcCurrentSemester(groupYear) : null;
 
   if (loading) return <p className={s.empty}>Загрузка...</p>;
   if (loadError) return <p className={s.errorMsg}>Не удалось загрузить данные. Попробуйте обновить страницу.</p>;
@@ -194,36 +215,73 @@ export default function GradesPage() {
 
       {tab === 'history' && (
         <>
-          {semesters.length === 0 ? (
-            <p className={s.empty}>История пуста</p>
+          {historySemester == null ? (
+            <p className={s.empty}>Нет данных о группе</p>
           ) : (
-            semesters.map((sem) => (
-              <div key={sem}>
-                <h3 className={s.historyYear}>{sem} семестр</h3>
-                <table className={s.table} style={{ tableLayout: 'fixed' }}>
-                  <colgroup>
-                    <col style={{ width: '72%' }} />
-                    <col style={{ width: '28%' }} />
-                  </colgroup>
+            <>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
+                <button
+                  className={s.btnTiny}
+                  onClick={() => setHistorySemester((v) => Math.max(1, v - 1))}
+                  disabled={historySemester <= 1}
+                >
+                  ◀
+                </button>
+                <span style={{ fontWeight: 600, fontSize: 16 }}>{historySemester} семестр</span>
+                <button
+                  className={s.btnTiny}
+                  onClick={() => setHistorySemester((v) => v + 1)}
+                  disabled={maxSemester != null && historySemester >= maxSemester}
+                >
+                  ▶
+                </button>
+                {autoHistorySem !== historySemester && (
+                  <span style={{ fontSize: 12, color: 'var(--text)', opacity: 0.5 }}>
+                    (текущий семестр: {autoHistorySem})
+                  </span>
+                )}
+              </div>
+
+              {historyPlanLoading && <p className={s.empty}>Загрузка...</p>}
+
+              {!historyPlanLoading && historyPlan && historyPlan.entries && historyPlan.entries.length > 0 && (
+                <table className={s.table}>
                   <thead>
                     <tr>
                       <th>Дисциплина</th>
+                      <th>Тип</th>
                       <th>Оценка</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {history[sem].map((g) => (
-                      <tr key={g.id}>
-                        <td data-label="Дисциплина">{g.discipline?.name || '—'}</td>
+                    {historyPlan.entries.map((entry) => (
+                      <tr key={entry.disciplineId}>
+                        <td data-label="Дисциплина">{entry.discipline?.name || '—'}</td>
+                        <td data-label="Тип" style={{ color: 'var(--text)', fontSize: 13 }}>
+                          {entry.discipline?.disciplineType === 'exam' ? 'Экзамен' : 'Зачёт'}
+                        </td>
                         <td data-label="Оценка">
-                          <GradeCell value={g.gradeValue} />
+                          {entry.gradeValue ? (
+                            <>
+                              <GradeCell value={entry.gradeValue} />
+                              {entry.isDebt && (
+                                <span className={`${s.badge} ${s.debtBadge}`}>Долг</span>
+                              )}
+                            </>
+                          ) : (
+                            <span style={{ color: 'var(--text)', opacity: 0.4, fontSize: 13 }}>Нет оценки</span>
+                          )}
                         </td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
-              </div>
-            ))
+              )}
+
+              {!historyPlanLoading && (!historyPlan || !historyPlan.entries || historyPlan.entries.length === 0) && (
+                <p className={s.empty}>Дисциплин на {historySemester} семестр не назначено</p>
+              )}
+            </>
           )}
         </>
       )}

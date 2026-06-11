@@ -64,6 +64,12 @@ export const importGroupDisciplines = (file) => {
   return api.post('/admin/group-disciplines/import', form);
 };
 
+export const importStudyPlan = (file) => {
+  const form = new FormData();
+  form.append('file', file);
+  return api.post('/admin/group-disciplines/import', form);
+};
+
 export const getDisciplines = () => api.get('/admin/disciplines');
 
 export const createDiscipline = (name, type) =>

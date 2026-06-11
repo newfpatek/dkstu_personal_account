@@ -302,10 +302,24 @@ export class StudentsService {
       ? await this.userGroupRoleRepo.find({ where: { groupId: In(groupIds) } })
       : [];
 
+    const maxSemRows = groupIds.length > 0
+      ? await this.groupSemDisciplineRepo
+          .createQueryBuilder('gsd')
+          .select('gsd.groupId', 'groupId')
+          .addSelect('MAX(gsd.semester)', 'maxSem')
+          .where('gsd.groupId IN (:...groupIds)', { groupIds })
+          .groupBy('gsd.groupId')
+          .getRawMany()
+      : [];
+    const maxSemMap = new Map<string, number | null>(
+      maxSemRows.map((r) => [r.groupId, r.maxSem != null ? Number(r.maxSem) : null]),
+    );
+
     return (user.groups ?? []).map((group) => ({
       id: group.id,
       name: group.name,
       year: group.year,
+      maxSemester: maxSemMap.get(group.id) ?? null,
       members: (group.members ?? [])
         .map((member) => {
           const entry = roleEntries.find(

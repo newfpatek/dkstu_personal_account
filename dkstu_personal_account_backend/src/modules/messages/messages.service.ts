@@ -124,19 +124,27 @@ export class MessagesService implements OnModuleInit {
   async getUsers(
     currentUserId: string,
     query?: string,
-  ): Promise<{ id: string; fullName: string; role: string; email: string | null }[]> {
+  ): Promise<{ id: string; fullName: string; role: string; email: string | null; phone: string | null; groups: { id: string; name: string }[] }[]> {
     const qb = this.userRepo
       .createQueryBuilder('u')
-      .select(['u.id', 'u.fullName', 'u.role', 'u.email'])
+      .leftJoinAndSelect('u.groups', 'g')
       .where('u.id != :currentUserId', { currentUserId });
 
     if (query?.trim()) {
       qb.andWhere(
-        '(u.name ILIKE :q OR u.email ILIKE :q)',
+        '(u.name ILIKE :q OR u.email ILIKE :q OR u.phone ILIKE :q)',
         { q: `%${query.trim()}%` },
       );
     }
-    return qb.orderBy('u.fullName', 'ASC').limit(10).getMany();
+    const users = await qb.orderBy('u.fullName', 'ASC').limit(10).getMany();
+    return users.map((u) => ({
+      id: u.id,
+      fullName: u.fullName,
+      role: u.role,
+      email: u.email,
+      phone: u.phone,
+      groups: (u.groups ?? []).map((g) => ({ id: g.id, name: g.name })),
+    }));
   }
 
   async getGroupsForUser(
@@ -181,7 +189,9 @@ export class MessagesService implements OnModuleInit {
         id: u.id,
         fullName: u.fullName,
         email: u.email,
+        phone: u.phone,
         role: u.role,
+        groups: u.groups,
       })),
       ...groups.map((g) => ({
         type: 'group' as const,

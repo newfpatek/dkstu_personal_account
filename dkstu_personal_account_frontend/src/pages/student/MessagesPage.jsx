@@ -142,7 +142,12 @@ function RecipientInput({ isStudent, onSelect, onClear }) {
                     {isGroup ? 'Группа' : (ROLE_LABELS[item.role] || item.role)}
                   </span>
                 </div>
-                {!isGroup && item.email && <div className={styles.suggestSub}>{item.email}</div>}
+                {!isGroup && item.groups?.length > 0 && (
+                  <div className={styles.suggestSub}>{item.groups.map((g) => g.name).join(', ')}</div>
+                )}
+                {!isGroup && (item.email || item.phone) && (
+                  <div className={styles.suggestSub}>{item.email || item.phone}</div>
+                )}
                 {isGroup && item.year && <div className={styles.suggestSub}>Год набора: {item.year}</div>}
               </div>
             );

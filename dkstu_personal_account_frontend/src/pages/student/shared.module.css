@@ -242,3 +242,25 @@
 
   .table td:last-child { padding-bottom: 0; }
 }
+
+.btnTiny {
+  padding: 3px 8px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text);
+  font-size: 12px;
+  cursor: pointer;
+  transition: border-color 0.15s, color 0.15s;
+  white-space: nowrap;
+}
+
+.btnTiny:hover:not(:disabled) {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.btnTiny:disabled {
+  opacity: 0.35;
+  cursor: default;
+}

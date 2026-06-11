@@ -487,11 +487,10 @@ export default function StaffStudentsPage() {
                       <span className={styles.paidTag}>Контракт</span>
                     )}
                   </span>
-                  <span className={styles.studentMeta}>
-                    {student.groups?.length > 0
-                      ? student.groups.map((g) => g.name).join(', ')
-                      : student.email}
-                  </span>
+                  {student.groups?.length > 0 && (
+                    <span className={styles.studentMeta}>{student.groups.map((g) => g.name).join(', ')}</span>
+                  )}
+                  <span className={styles.studentMeta}>{student.email || student.phone}</span>
                 </div>
               ))}
           </div>

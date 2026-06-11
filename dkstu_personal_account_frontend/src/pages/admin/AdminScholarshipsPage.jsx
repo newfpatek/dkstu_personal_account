@@ -406,7 +406,7 @@ export default function AdminScholarshipsPage() {
   const filteredStudents = debouncedQuery.trim()
     ? students.filter((u) => {
         const q = debouncedQuery.toLowerCase();
-        return u.fullName?.toLowerCase().includes(q) || u.email?.toLowerCase().includes(q);
+        return u.fullName?.toLowerCase().includes(q) || u.email?.toLowerCase().includes(q) || u.phone?.includes(q);
       })
     : [];
 
@@ -554,7 +554,12 @@ export default function AdminScholarshipsPage() {
                   }}
                 >
                   <span className={adminStyles.userName}>{u.fullName}</span>
-                  <span className={adminStyles.userEmail}>{u.email}</span>
+                  {u.groups?.length > 0 && (
+                    <span className={adminStyles.userEmail}>{u.groups.map((g) => g.name).join(', ')}</span>
+                  )}
+                  {(u.email || u.phone) && (
+                    <span className={adminStyles.userEmail}>{u.email || u.phone}</span>
+                  )}
                 </div>
               ))}
           </div>

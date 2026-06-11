@@ -1,11 +1,12 @@
 import { useState, useEffect, useRef } from 'react';
 import {
   getGroups,
-  getDisciplines,
+  getGroupSemesterDisciplines,
   getGroupGrades,
   upsertGrades,
   importGrades as importGradesApi,
 } from '../../api/admin';
+import { calcCurrentSemester } from '../../utils/semester';
 import { useToast } from '../../contexts/ToastContext';
 import { getErrorMessage } from '../../utils/error';
 import s from '../student/shared.module.css';
@@ -35,17 +36,15 @@ export default function AdminGradesPage() {
   const [debouncedGroupQuery, setDebouncedGroupQuery] = useState('');
   const groupDebounceRef = useRef(null);
 
-  const [allDisciplines, setAllDisciplines] = useState([]);
-  const [discQuery, setDiscQuery] = useState('');
-  const [discOpen, setDiscOpen] = useState(false);
-  const [selectedDisc, setSelectedDisc] = useState(null);
-  const [semester, setSemester] = useState('');
+  const [semester, setSemester] = useState(null);
+  const [disciplines, setDisciplines] = useState([]);
+  const [disciplinesLoading, setDisciplinesLoading] = useState(false);
 
-  const [students, setStudents] = useState([]);
-  const [localGrades, setLocalGrades] = useState({});
-  const [gradesLoading, setGradesLoading] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [saveResult, setSaveResult] = useState(null);
+  const [openDiscId, setOpenDiscId] = useState(null);
+  const [discGrades, setDiscGrades] = useState({});
+  const [discLoading, setDiscLoading] = useState({});
+  const [discSaving, setDiscSaving] = useState({});
+  const [discSaveResult, setDiscSaveResult] = useState({});
 
   const [importLoading, setImportLoading] = useState(false);
   const [importResult, setImportResult] = useState(null);
@@ -55,9 +54,6 @@ export default function AdminGradesPage() {
     getGroups()
       .then((r) => setGroups(r.data))
       .catch((err) => showToast(getErrorMessage(err, 'Не удалось загрузить группы')));
-    getDisciplines()
-      .then((r) => setAllDisciplines(r.data))
-      .catch((err) => showToast(getErrorMessage(err, 'Не удалось загрузить дисциплины')));
   }, []);
 
   useEffect(() => {
@@ -70,55 +66,105 @@ export default function AdminGradesPage() {
     ? groups.filter((g) => g.name.toLowerCase().includes(debouncedGroupQuery.trim().toLowerCase()))
     : [];
 
-  const discResults = discQuery.trim().length >= 1
-    ? allDisciplines.filter((d) => d.name.toLowerCase().includes(discQuery.trim().toLowerCase())).slice(0, 8)
-    : [];
+  useEffect(() => {
+    if (!selectedGroup) {
+      setDisciplines([]);
+      setSemester(null);
+      return;
+    }
+    setSemester(calcCurrentSemester(selectedGroup.year));
+    setOpenDiscId(null);
+    setDiscGrades({});
+    setDiscSaveResult({});
+  }, [selectedGroup?.id]);
 
-  const loadGrades = async (gId, dId, sem) => {
-    if (!gId || !dId || !sem) return;
-    setGradesLoading(true);
-    setSaveResult(null);
-    try {
-      const res = await getGroupGrades(gId, dId, sem);
-      setStudents(res.data);
-      const map = {};
-      res.data.forEach((st) => { map[st.studentId] = st.gradeValue || ''; });
-      setLocalGrades(map);
-    } catch (err) {
-      showToast(getErrorMessage(err, 'Не удалось загрузить оценки'));
-    } finally {
-      setGradesLoading(false);
+  useEffect(() => {
+    if (!selectedGroup || !semester) return;
+    setDisciplinesLoading(true);
+    setOpenDiscId(null);
+    setDiscGrades({});
+    setDiscSaveResult({});
+    getGroupSemesterDisciplines(selectedGroup.id, semester)
+      .then((r) => setDisciplines(r.data))
+      .catch((err) => showToast(getErrorMessage(err, 'Не удалось загрузить дисциплины')))
+      .finally(() => setDisciplinesLoading(false));
+  }, [selectedGroup?.id, semester]);
+
+  const handleToggleDisc = async (disc) => {
+    if (openDiscId === disc.id) {
+      setOpenDiscId(null);
+      return;
+    }
+    setOpenDiscId(disc.id);
+
+    if (!discGrades[disc.id]) {
+      setDiscLoading((prev) => ({ ...prev, [disc.id]: true }));
+      try {
+        const res = await getGroupGrades(selectedGroup.id, disc.disciplineId, semester);
+        setDiscGrades((prev) => ({
+          ...prev,
+          [disc.id]: {
+            students: res.data,
+            localGrades: Object.fromEntries(res.data.map((st) => [st.studentId, st.gradeValue || ''])),
+          },
+        }));
+      } catch (err) {
+        showToast(getErrorMessage(err, 'Не удалось загрузить оценки'));
+      } finally {
+        setDiscLoading((prev) => ({ ...prev, [disc.id]: false }));
+      }
     }
   };
 
-  useEffect(() => {
-    if (selectedGroup && selectedDisc && semester) {
-      loadGrades(selectedGroup.id, selectedDisc.id, semester);
-    } else {
-      setStudents([]);
-      setLocalGrades({});
-    }
-  }, [selectedGroup?.id, selectedDisc?.id, semester]);
+  const handleGradeChange = (discId, studentId, value) => {
+    setDiscGrades((prev) => ({
+      ...prev,
+      [discId]: {
+        ...prev[discId],
+        localGrades: { ...prev[discId].localGrades, [studentId]: value },
+      },
+    }));
+    setDiscSaveResult((prev) => ({ ...prev, [discId]: null }));
+  };
 
-  const handleSave = async () => {
-    if (!selectedDisc || !semester) return;
-    setSaving(true);
-    setSaveResult(null);
+  const handleSaveDisc = async (disc) => {
+    const data = discGrades[disc.id];
+    if (!data) return;
+    setDiscSaving((prev) => ({ ...prev, [disc.id]: true }));
+    setDiscSaveResult((prev) => ({ ...prev, [disc.id]: null }));
     try {
-      const grades = students.map((st) => ({
+      const grades = data.students.map((st) => ({
         studentId: st.studentId,
-        gradeValue: localGrades[st.studentId] || null,
+        gradeValue: data.localGrades[st.studentId] || null,
       }));
       const res = await upsertGrades({
-        disciplineId: selectedDisc.id,
+        disciplineId: disc.disciplineId,
         semester: Number(semester),
         grades,
       });
-      setSaveResult({ ok: true, ...res.data });
+      setDiscSaveResult((prev) => ({ ...prev, [disc.id]: { ok: true, ...res.data } }));
     } catch (err) {
       showToast(getErrorMessage(err, 'Не удалось сохранить оценки'));
     } finally {
-      setSaving(false);
+      setDiscSaving((prev) => ({ ...prev, [disc.id]: false }));
+    }
+  };
+
+  const reloadOpenDisc = async () => {
+    if (!openDiscId || !selectedGroup) return;
+    const disc = disciplines.find((d) => d.id === openDiscId);
+    if (!disc) return;
+    try {
+      const res = await getGroupGrades(selectedGroup.id, disc.disciplineId, semester);
+      setDiscGrades((prev) => ({
+        ...prev,
+        [openDiscId]: {
+          students: res.data,
+          localGrades: Object.fromEntries(res.data.map((st) => [st.studentId, st.gradeValue || ''])),
+        },
+      }));
+    } catch {
+      // silent
     }
   };
 
@@ -131,9 +177,7 @@ export default function AdminGradesPage() {
     try {
       const res = await importGradesApi(file);
       setImportResult({ ok: true, data: res.data });
-      if (selectedGroup && selectedDisc && semester) {
-        await loadGrades(selectedGroup.id, selectedDisc.id, semester);
-      }
+      await reloadOpenDisc();
     } catch (err) {
       setImportResult({ ok: false, message: err.response?.data?.message || 'Ошибка импорта' });
     } finally {
@@ -141,8 +185,7 @@ export default function AdminGradesPage() {
     }
   };
 
-  const gradeOptions = selectedDisc?.disciplineType === 'pass_fail' ? PASS_FAIL_GRADES : EXAM_GRADES;
-  const canLoad = !!(selectedGroup && selectedDisc && semester);
+  const autoSem = selectedGroup ? calcCurrentSemester(selectedGroup.year) : null;
 
   return (
     <div>
@@ -161,7 +204,7 @@ export default function AdminGradesPage() {
             onClick={() => importRef.current?.click()}
             disabled={importLoading}
           >
-            {importLoading ? 'Импорт...' : 'Импорт из файла'}
+            {importLoading ? 'Импорт...' : 'Импорт оценок'}
           </button>
         </div>
       </div>
@@ -213,7 +256,7 @@ export default function AdminGradesPage() {
               <div
                 key={g.id}
                 className={`${styles.groupItem} ${selectedGroup?.id === g.id ? styles.groupItemSelected : ''}`}
-                onClick={() => { setSelectedGroup(g); setSaveResult(null); }}
+                onClick={() => { setSelectedGroup(g); setImportResult(null); }}
               >
                 <span className={styles.groupItemName}>{g.name}</span>
                 <span className={styles.groupItemMeta}>
@@ -224,7 +267,7 @@ export default function AdminGradesPage() {
           </div>
         </div>
 
-        {/* Right: params + grades */}
+        {/* Right: semester + disciplines accordion */}
         <div className={styles.rightPanel}>
           {!selectedGroup ? (
             <p className={s.empty}>Выберите группу слева</p>
@@ -232,135 +275,151 @@ export default function AdminGradesPage() {
             <>
               <h2 className={styles.groupTitle}>{selectedGroup.name}</h2>
 
-              {/* Params */}
-              <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 20, alignItems: 'flex-end' }}>
-                <div className={styles.formRow} style={{ flex: '1 1 220px', position: 'relative' }}>
-                  <label className={styles.label}>Дисциплина</label>
-                  <input
-                    className={styles.input}
-                    placeholder="Поиск дисциплины..."
-                    value={discQuery}
-                    onChange={(e) => {
-                      setDiscQuery(e.target.value);
-                      setDiscOpen(true);
-                      if (!e.target.value.trim()) setSelectedDisc(null);
-                    }}
-                    onFocus={() => setDiscOpen(true)}
-                    onBlur={() => setTimeout(() => setDiscOpen(false), 150)}
-                  />
-                  {discOpen && discQuery.trim().length >= 1 && (
-                    <div
-                      className={styles.searchResults}
-                      style={{ position: 'absolute', zIndex: 10, width: '100%', top: '100%' }}
-                    >
-                      {discResults.map((d) => (
-                        <div
-                          key={d.id}
-                          className={styles.searchResultItem}
-                          onMouseDown={() => {
-                            setSelectedDisc(d);
-                            setDiscQuery(d.name);
-                            setDiscOpen(false);
-                          }}
-                          style={{ cursor: 'pointer' }}
-                        >
-                          <span className={styles.searchName}>{d.name}</span>
-                          <span className={styles.searchEmail}>
-                            {d.disciplineType === 'exam' ? 'Экзамен' : 'Зачёт'}
-                          </span>
-                        </div>
-                      ))}
-                      {discResults.length === 0 && (
-                        <div className={styles.searchResultItem} style={{ color: 'var(--text)', opacity: 0.6, cursor: 'default' }}>
-                          Не найдено
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </div>
-
-                <div className={styles.formRow} style={{ flex: '0 0 80px' }}>
-                  <label className={styles.label}>Семестр</label>
-                  <input
-                    className={styles.input}
-                    type="number"
-                    min={1} max={12}
-                    placeholder="1"
-                    value={semester}
-                    onChange={(e) => setSemester(e.target.value)}
-                  />
-                </div>
+              {/* Semester navigation */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 20 }}>
+                <button
+                  className={styles.btnTiny}
+                  onClick={() => setSemester((v) => Math.max(1, v - 1))}
+                  disabled={!semester || semester <= 1}
+                >
+                  ◀
+                </button>
+                <span style={{ fontWeight: 600, fontSize: 16 }}>{semester} семестр</span>
+                <button
+                  className={styles.btnTiny}
+                  onClick={() => setSemester((v) => v + 1)}
+                  disabled={selectedGroup.maxSemester != null && semester >= selectedGroup.maxSemester}
+                >
+                  ▶
+                </button>
               </div>
 
-              {/* Students table */}
-              {!canLoad && (
-                <p className={s.empty}>Выберите дисциплину и семестр</p>
+              {disciplinesLoading && <p className={s.empty}>Загрузка дисциплин...</p>}
+
+              {!disciplinesLoading && disciplines.length === 0 && (
+                <p className={s.empty}>
+                  Дисциплин на {semester} семестр не назначено.{' '}
+                  Импортируйте учебный план в разделе «Группы».
+                </p>
               )}
 
-              {canLoad && gradesLoading && <p className={s.empty}>Загрузка оценок...</p>}
+              {!disciplinesLoading && disciplines.map((disc) => {
+                const isOpen = openDiscId === disc.id;
+                const gradeOptions = disc.discipline?.disciplineType === 'pass_fail'
+                  ? PASS_FAIL_GRADES
+                  : EXAM_GRADES;
+                const gradeData = discGrades[disc.id];
+                const loading = discLoading[disc.id];
+                const saving = discSaving[disc.id];
+                const saveResult = discSaveResult[disc.id];
 
-              {canLoad && !gradesLoading && students.length === 0 && (
-                <p className={s.empty}>Нет студентов в группе</p>
-              )}
-
-              {canLoad && !gradesLoading && students.length > 0 && (
-                <>
-                  <table className={s.table}>
-                    <thead>
-                      <tr>
-                        <th>№</th>
-                        <th>Студент</th>
-                        <th>Оценка</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {students.map((st, idx) => (
-                        <tr key={st.studentId}>
-                          <td data-label="№" style={{ width: 36, color: 'var(--text)', opacity: 0.5, fontSize: 13 }}>
-                            {idx + 1}
-                          </td>
-                          <td data-label="Студент">
-                            <div style={{ fontWeight: 500 }}>{st.fullName}</div>
-                            {st.gradeBook && (
-                              <div style={{ fontSize: 12, color: 'var(--text)', opacity: 0.6 }}>
-                                Зач. кн. {st.gradeBook}
-                              </div>
-                            )}
-                          </td>
-                          <td data-label="Оценка">
-                            <select
-                              className={styles.select}
-                              value={localGrades[st.studentId] ?? ''}
-                              onChange={(e) =>
-                                setLocalGrades((prev) => ({ ...prev, [st.studentId]: e.target.value }))
-                              }
-                            >
-                              {gradeOptions.map((o) => (
-                                <option key={o.value} value={o.value}>{o.label}</option>
-                              ))}
-                            </select>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginTop: 16, flexWrap: 'wrap' }}>
-                    <button
-                      className={styles.btnPrimary}
-                      onClick={handleSave}
-                      disabled={saving}
+                return (
+                  <div
+                    key={disc.id}
+                    style={{
+                      border: '1px solid var(--border)',
+                      borderRadius: 8,
+                      marginBottom: 8,
+                      overflow: 'hidden',
+                    }}
+                  >
+                    <div
+                      style={{
+                        padding: '12px 16px',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 10,
+                        background: isOpen ? 'var(--accent-bg)' : 'transparent',
+                        userSelect: 'none',
+                      }}
+                      onClick={() => handleToggleDisc(disc)}
                     >
-                      {saving ? 'Сохранение...' : 'Сохранить оценки'}
-                    </button>
-                    {saveResult?.ok && (
-                      <span style={{ fontSize: 13, color: '#15803d' }}>
-                        Сохранено: {saveResult.saved}. Удалено: {saveResult.cleared}.
+                      <span style={{ fontSize: 14, fontWeight: 500, flex: 1 }}>
+                        {disc.discipline?.name}
                       </span>
+                      <span style={{ fontSize: 12, color: 'var(--text)', opacity: 0.55 }}>
+                        {disc.discipline?.disciplineType === 'exam' ? 'Экзамен' : 'Зачёт'}
+                      </span>
+                      <span style={{ fontSize: 13, color: 'var(--accent)', fontWeight: 600 }}>
+                        {isOpen ? '▲' : '▼'}
+                      </span>
+                    </div>
+
+                    {isOpen && (
+                      <div style={{ padding: '0 16px 16px', borderTop: '1px solid var(--border)' }}>
+                        {loading && <p className={s.empty}>Загрузка оценок...</p>}
+
+                        {!loading && gradeData && gradeData.students.length === 0 && (
+                          <p className={s.empty}>Нет студентов в группе</p>
+                        )}
+
+                        {!loading && gradeData && gradeData.students.length > 0 && (
+                          <>
+                            <table className={s.table} style={{ marginTop: 12 }}>
+                              <thead>
+                                <tr>
+                                  <th>№</th>
+                                  <th>Студент</th>
+                                  <th>Оценка</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {gradeData.students.map((st, idx) => (
+                                  <tr key={st.studentId}>
+                                    <td
+                                      data-label="№"
+                                      style={{ width: 36, color: 'var(--text)', opacity: 0.5, fontSize: 13 }}
+                                    >
+                                      {idx + 1}
+                                    </td>
+                                    <td data-label="Студент">
+                                      <div style={{ fontWeight: 500 }}>{st.fullName}</div>
+                                      {st.gradeBook && (
+                                        <div style={{ fontSize: 12, color: 'var(--text)', opacity: 0.6 }}>
+                                          Зач. кн. {st.gradeBook}
+                                        </div>
+                                      )}
+                                    </td>
+                                    <td data-label="Оценка">
+                                      <select
+                                        className={styles.select}
+                                        value={gradeData.localGrades[st.studentId] ?? ''}
+                                        onChange={(e) =>
+                                          handleGradeChange(disc.id, st.studentId, e.target.value)
+                                        }
+                                      >
+                                        {gradeOptions.map((o) => (
+                                          <option key={o.value} value={o.value}>{o.label}</option>
+                                        ))}
+                                      </select>
+                                    </td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginTop: 12, flexWrap: 'wrap' }}>
+                              <button
+                                className={styles.btnPrimary}
+                                onClick={() => handleSaveDisc(disc)}
+                                disabled={saving}
+                              >
+                                {saving ? 'Сохранение...' : 'Сохранить'}
+                              </button>
+                              {saveResult?.ok && (
+                                <span style={{ fontSize: 13, color: '#15803d' }}>
+                                  Сохранено: {saveResult.saved}. Удалено: {saveResult.cleared}.
+                                </span>
+                              )}
+                            </div>
+                          </>
+                        )}
+                      </div>
                     )}
                   </div>
-                </>
-              )}
+                );
+              })}
             </>
           )}
         </div>

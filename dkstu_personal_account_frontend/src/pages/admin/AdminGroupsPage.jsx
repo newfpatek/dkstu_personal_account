@@ -10,13 +10,11 @@ import {
   removeGroupRole,
   getUsers,
   importGroup,
-  getDisciplines,
-  createDiscipline as createDisciplineApi,
   getGroupSemesterDisciplines,
-  assignGroupDisciplines,
   removeGroupSemesterDiscipline,
-  importGroupDisciplines,
+  importStudyPlan,
 } from '../../api/admin';
+import { calcCurrentSemester } from '../../utils/semester';
 import { useToast } from '../../contexts/ToastContext';
 import { getErrorMessage } from '../../utils/error';
 import s from '../student/shared.module.css';
@@ -98,8 +96,9 @@ function AddMemberPanel({ groupId, existingIds, onAdded }) {
         const q = query.trim().toLowerCase();
         const filtered = res.data.filter(
           (u) =>
+            u.role === 'student' &&
             !existingIds.has(u.id) &&
-            (u.fullName?.toLowerCase().includes(q) || u.email?.toLowerCase().includes(q))
+            (u.fullName?.toLowerCase().includes(q) || u.email?.toLowerCase().includes(q) || u.phone?.includes(q))
         );
         setResults(filtered.slice(0, 10));
       } catch {
@@ -148,7 +147,10 @@ function AddMemberPanel({ groupId, existingIds, onAdded }) {
                   {ROLE_LABELS[u.role] || u.role}
                 </span>
               </span>
-              <span className={styles.searchEmail}>{u.email}</span>
+              <span className={styles.searchEmail}>
+                {u.groups?.length > 0 ? u.groups.map((g) => g.name).join(', ') : ''}
+              </span>
+              <span className={styles.searchEmail}>{u.email || u.phone}</span>
               <button
                 className={styles.btnSmall}
                 onClick={() => handleAdd(u)}
@@ -221,23 +223,23 @@ function SetRoleModal({ member, groupId, onSave, onClose }) {
   );
 }
 
-function GroupDisciplinesPanel({ groupId }) {
+function GroupDisciplinesPanel({ groupId, groupYear, maxSemester }) {
   const { showToast } = useToast();
-  const [allDisciplines, setAllDisciplines] = useState([]);
   const [planEntries, setPlanEntries] = useState([]);
-  const [semester, setSemester] = useState('');
-  const [selected, setSelected] = useState([]); // [{id, name, disciplineType}]
-  const [searchQuery, setSearchQuery] = useState('');
-  const [searchOpen, setSearchOpen] = useState(false);
-  const [saving, setSaving] = useState(false);
+  const [semester, setSemester] = useState(1);
   const [removingId, setRemovingId] = useState(null);
-  const [importResult, setImportResult] = useState(null);
-  const [importLoading, setImportLoading] = useState(false);
-  const importRef = useRef(null);
+  const [planImportResult, setPlanImportResult] = useState(null);
+  const [planImportLoading, setPlanImportLoading] = useState(false);
+  const planImportRef = useRef(null);
 
-  const loadPlan = async () => {
+  useEffect(() => {
+    setSemester(calcCurrentSemester(groupYear));
+    setPlanImportResult(null);
+  }, [groupId]);
+
+  const loadPlan = async (sem) => {
     try {
-      const res = await getGroupSemesterDisciplines(groupId);
+      const res = await getGroupSemesterDisciplines(groupId, sem);
       setPlanEntries(res.data);
     } catch (err) {
       showToast(getErrorMessage(err, 'Не удалось загрузить план дисциплин'));
@@ -245,62 +247,14 @@ function GroupDisciplinesPanel({ groupId }) {
   };
 
   useEffect(() => {
-    getDisciplines().then((r) => setAllDisciplines(r.data)).catch((err) => showToast(getErrorMessage(err, 'Не удалось загрузить дисциплины')));
-    loadPlan();
-  }, [groupId]);
-
-  // Подставляем семестр из существующего плана при первой загрузке
-  useEffect(() => {
-    if (planEntries.length > 0 && !semester) {
-      setSemester(String(planEntries[0].semester));
-    }
-  }, [planEntries]);
-
-  const assignedIds = new Set(planEntries.map((e) => e.disciplineId));
-  const selectedIds = new Set(selected.map((d) => d.id));
-
-  // Результаты поиска: исключаем уже назначенные и уже выбранные
-  const searchResults = searchQuery.trim().length >= 1
-    ? allDisciplines.filter(
-        (d) =>
-          !assignedIds.has(d.id) &&
-          !selectedIds.has(d.id) &&
-          d.name.toLowerCase().includes(searchQuery.trim().toLowerCase()),
-      ).slice(0, 8)
-    : [];
-
-  const handleSelectDiscipline = (d) => {
-    setSelected((prev) => [...prev, d]);
-    setSearchQuery('');
-  };
-
-  const handleRemoveSelected = (id) => {
-    setSelected((prev) => prev.filter((d) => d.id !== id));
-  };
-
-  const handleAssign = async () => {
-    if (!selected.length || !semester) return;
-    setSaving(true);
-    try {
-      await assignGroupDisciplines({
-        groupId,
-        disciplineIds: selected.map((d) => d.id),
-        semester: Number(semester),
-      });
-      setSelected([]);
-      await loadPlan();
-    } catch (e) {
-      showToast(getErrorMessage(e, 'Ошибка при добавлении дисциплин'));
-    } finally {
-      setSaving(false);
-    }
-  };
+    loadPlan(semester);
+  }, [groupId, semester]);
 
   const handleRemovePlan = async (id) => {
     setRemovingId(id);
     try {
       await removeGroupSemesterDiscipline(id);
-      await loadPlan();
+      await loadPlan(semester);
     } catch (e) {
       showToast(getErrorMessage(e, 'Ошибка при удалении дисциплины'));
     } finally {
@@ -308,207 +262,122 @@ function GroupDisciplinesPanel({ groupId }) {
     }
   };
 
-  const handleImport = async (e) => {
+  const handlePlanImport = async (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
     e.target.value = '';
-    setImportLoading(true);
-    setImportResult(null);
+    setPlanImportLoading(true);
+    setPlanImportResult(null);
     try {
-      const res = await importGroupDisciplines(file);
-      setImportResult({ ok: true, data: res.data });
-      const [, discRes] = await Promise.all([loadPlan(), getDisciplines()]);
-      setAllDisciplines(discRes.data);
+      const res = await importStudyPlan(file);
+      setPlanImportResult({ ok: true, data: res.data });
+      await loadPlan(semester);
     } catch (err) {
-      setImportResult({ ok: false, message: err.response?.data?.message || 'Ошибка импорта' });
+      setPlanImportResult({ ok: false, message: err.response?.data?.message || 'Ошибка импорта' });
     } finally {
-      setImportLoading(false);
+      setPlanImportLoading(false);
     }
   };
 
-  const handleCreateDiscipline = async (name, type) => {
-    try {
-      const res = await createDisciplineApi(name, type);
-      const newDisc = res.data;
-      setAllDisciplines((prev) => [...prev, newDisc].sort((a, b) => a.name.localeCompare(b.name, 'ru')));
-      handleSelectDiscipline(newDisc);
-    } catch (err) {
-      showToast(getErrorMessage(err, 'Ошибка при создании дисциплины'));
-    }
-  };
-
-  const activeSemesterLabel = planEntries.length > 0
-    ? `${planEntries[0].semester} семестр`
-    : null;
+  const autoSem = calcCurrentSemester(groupYear);
 
   return (
     <div style={{ marginTop: 24 }}>
-      <p className={styles.sectionLabel}>Дисциплины на семестр</p>
-
-      {importResult && importResult.ok && (
-        <div className={styles.importSuccess} style={{ marginBottom: 12 }}>
-          Добавлено: {importResult.data.assigned}. Пропущено: {importResult.data.skipped}.
-          {importResult.data.errors?.length > 0 && (
-            <ul style={{ margin: '4px 0 0', paddingLeft: 16, fontSize: 12 }}>
-              {importResult.data.errors.map((err, i) => <li key={i}>{err}</li>)}
-            </ul>
-          )}
-        </div>
-      )}
-      {importResult && !importResult.ok && (
-        <div className={styles.importError} style={{ marginBottom: 12 }}>{importResult.message}</div>
-      )}
-
-      {/* Форма добавления */}
-      <div className={styles.addMemberPanel}>
-        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 10 }}>
-          <div className={styles.formRow} style={{ flex: '0 0 100px' }}>
-            <label className={styles.label}>Семестр</label>
-            <input
-              className={styles.input}
-              type="number"
-              min={1} max={12}
-              value={semester}
-              onChange={(e) => setSemester(e.target.value)}
-              placeholder="1"
-            />
-          </div>
-        </div>
-
-        {/* Поиск дисциплины */}
-        <div style={{ position: 'relative', marginBottom: 8 }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8, marginBottom: 10 }}>
+        <p className={styles.sectionLabel} style={{ margin: 0 }}>Дисциплины</p>
+        <div>
           <input
-            className={styles.input}
-            placeholder="Поиск дисциплины..."
-            value={searchQuery}
-            onChange={(e) => { setSearchQuery(e.target.value); setSearchOpen(true); }}
-            onFocus={() => setSearchOpen(true)}
-            onBlur={() => setTimeout(() => setSearchOpen(false), 150)}
-          />
-          {searchOpen && searchQuery.trim().length >= 1 && (
-            <div className={styles.searchResults} style={{ position: 'absolute', zIndex: 10, width: '100%', top: '100%' }}>
-              {searchResults.map((d) => (
-                <div
-                  key={d.id}
-                  className={styles.searchResultItem}
-                  onMouseDown={() => handleSelectDiscipline(d)}
-                  style={{ cursor: 'pointer' }}
-                >
-                  <span className={styles.searchName}>{d.name}</span>
-                  <span className={styles.searchEmail}>
-                    {d.disciplineType === 'exam' ? 'Экзамен' : 'Зачёт'}
-                  </span>
-                </div>
-              ))}
-              {searchResults.length === 0 && (
-                <>
-                  <div
-                    className={styles.searchResultItem}
-                    onMouseDown={() => handleCreateDiscipline(searchQuery.trim(), 'exam')}
-                    style={{ cursor: 'pointer' }}
-                  >
-                    <span className={styles.searchName}>➕ Создать «{searchQuery.trim()}»</span>
-                    <span className={styles.searchEmail}>Экзамен</span>
-                  </div>
-                  <div
-                    className={styles.searchResultItem}
-                    onMouseDown={() => handleCreateDiscipline(searchQuery.trim(), 'pass_fail')}
-                    style={{ cursor: 'pointer' }}
-                  >
-                    <span className={styles.searchName}>➕ Создать «{searchQuery.trim()}»</span>
-                    <span className={styles.searchEmail}>Зачёт</span>
-                  </div>
-                </>
-              )}
-            </div>
-          )}
-        </div>
-
-        {/* Выбранные чипы */}
-        {selected.length > 0 && (
-          <div className={styles.chipList}>
-            {selected.map((d) => (
-              <span key={d.id} className={styles.chip}>
-                {d.name}
-                <span className={styles.chipType}>
-                  {d.disciplineType === 'exam' ? 'Экзамен' : 'Зачёт'}
-                </span>
-                <button
-                  className={styles.chipRemove}
-                  onClick={() => handleRemoveSelected(d.id)}
-                  title="Убрать"
-                >
-                  ×
-                </button>
-              </span>
-            ))}
-          </div>
-        )}
-
-        <div style={{ display: 'flex', gap: 8, marginTop: 10, flexWrap: 'wrap' }}>
-          <button
-            className={styles.btnPrimary}
-            onClick={handleAssign}
-            disabled={saving || !selected.length || !semester}
-          >
-            {saving ? 'Сохранение...' : `Добавить выбранные (${selected.length})`}
-          </button>
-          <input
-            ref={importRef}
+            ref={planImportRef}
             type="file"
-            accept=".json,.xml,.xlsx"
+            accept=".xlsx"
             style={{ display: 'none' }}
-            onChange={handleImport}
+            onChange={handlePlanImport}
           />
           <button
             className={styles.btnSecondary}
-            onClick={() => importRef.current?.click()}
-            disabled={importLoading}
+            style={{ fontSize: 13, padding: '5px 12px' }}
+            onClick={() => planImportRef.current?.click()}
+            disabled={planImportLoading}
           >
-            {importLoading ? 'Импорт...' : 'Импорт из файла'}
+            {planImportLoading ? 'Импорт...' : 'Импорт учебного плана'}
           </button>
         </div>
       </div>
 
-      {/* Текущий план */}
-      {planEntries.length > 0 && (
-        <div style={{ marginTop: 16 }}>
-          <p className={styles.sectionLabel} style={{ marginBottom: 6 }}>
-            Текущий план: {activeSemesterLabel}
-          </p>
-          <table className={s.table}>
-            <thead>
-              <tr>
-                <th>Дисциплина</th>
-                <th>Тип</th>
-                <th></th>
-              </tr>
-            </thead>
-            <tbody>
-              {planEntries.map((e) => (
-                <tr key={e.id}>
-                  <td data-label="Дисциплина">{e.discipline?.name}</td>
-                  <td data-label="Тип" style={{ fontSize: 13, color: 'var(--text)' }}>
-                    {e.discipline?.disciplineType === 'exam' ? 'Экзамен' : 'Зачёт'}
-                  </td>
-                  <td data-label="">
-                    <button
-                      className={styles.btnTinyDanger}
-                      onClick={() => handleRemovePlan(e.id)}
-                      disabled={removingId === e.id}
-                    >
-                      Убрать
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+      {planImportResult && planImportResult.ok && (
+        <div className={styles.importSuccess} style={{ marginBottom: 10 }}>
+          <div className={styles.importSummary}>
+            <span>Добавлено: <b>{planImportResult.data.assigned}</b>. Пропущено: <b>{planImportResult.data.skipped}</b>.</span>
+            <button className={styles.importClose} onClick={() => setPlanImportResult(null)}>✕</button>
+          </div>
+          {planImportResult.data.errors?.length > 0 && (
+            <ul className={styles.importErrors}>
+              {planImportResult.data.errors.map((err, i) => <li key={i}>{err}</li>)}
+            </ul>
+          )}
+        </div>
+      )}
+      {planImportResult && !planImportResult.ok && (
+        <div className={styles.importError} style={{ marginBottom: 10 }}>
+          <span>{planImportResult.message}</span>
+          <button className={styles.importClose} onClick={() => setPlanImportResult(null)}>✕</button>
         </div>
       )}
 
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
+        <button
+          className={styles.btnTiny}
+          onClick={() => setSemester((v) => Math.max(1, v - 1))}
+          disabled={semester <= 1}
+        >
+          ◀
+        </button>
+        <span style={{ fontWeight: 600, fontSize: 14 }}>{semester} семестр</span>
+        <button
+          className={styles.btnTiny}
+          onClick={() => setSemester((v) => v + 1)}
+          disabled={maxSemester != null && semester >= maxSemester}
+        >
+          ▶
+        </button>
+        <span style={{ fontSize: 12, color: 'var(--text)', opacity: 0.5 }}>
+          (текущий семестр: {autoSem})
+        </span>
+      </div>
+
       {planEntries.length === 0 && (
-        <p className={s.empty} style={{ marginTop: 8 }}>Дисциплины на семестр ещё не назначены</p>
+        <p className={s.empty}>Дисциплин на {semester} семестр нет</p>
+      )}
+
+      {planEntries.length > 0 && (
+        <table className={s.table}>
+          <thead>
+            <tr>
+              <th>Дисциплина</th>
+              <th>Тип</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            {planEntries.map((e) => (
+              <tr key={e.id}>
+                <td data-label="Дисциплина">{e.discipline?.name}</td>
+                <td data-label="Тип" style={{ fontSize: 13, color: 'var(--text)' }}>
+                  {e.discipline?.disciplineType === 'exam' ? 'Экзамен' : 'Зачёт'}
+                </td>
+                <td data-label="">
+                  <button
+                    className={styles.btnTinyDanger}
+                    onClick={() => handleRemovePlan(e.id)}
+                    disabled={removingId === e.id}
+                  >
+                    Убрать
+                  </button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
       )}
     </div>
   );
@@ -681,7 +550,7 @@ function GroupDetail({ group, onDeleted, onRefresh }) {
         <p className={s.empty}>В группе пока нет участников</p>
       )}
 
-      <GroupDisciplinesPanel groupId={group.id} />
+      <GroupDisciplinesPanel groupId={group.id} groupYear={group.year} maxSemester={group.maxSemester} />
 
       {roleModal && (
         <SetRoleModal
@@ -707,6 +576,7 @@ export default function AdminGroupsPage() {
   const [importResult, setImportResult] = useState(null);
   const [importLoading, setImportLoading] = useState(false);
   const importFileRef = useRef(null);
+
 
   const loadGroups = async (keepSelected) => {
     setLoading(true);
@@ -761,10 +631,11 @@ export default function AdminGroupsPage() {
     }
   };
 
+
   const downloadExcel = (groupName, rows) => {
-    const data = rows.map((r) => ({ Группа: groupName || '', Телефон: r.phone, Пароль: r.password }));
+    const data = rows.map((r) => ({ ФИО: r.fullName || '', Телефон: r.phone, Пароль: r.password }));
     const ws = XLSX.utils.json_to_sheet(data);
-    ws['!cols'] = [{ wch: 20 }, { wch: 30 }, { wch: 18 }];
+    ws['!cols'] = [{ wch: 36 }, { wch: 18 }, { wch: 18 }];
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Пароли');
     XLSX.writeFile(wb, `passwords_${groupName || 'group'}.xlsx`);
@@ -789,7 +660,7 @@ export default function AdminGroupsPage() {
         <h1 className={s.pageTitle} style={{ margin: 0 }}>
           Группы
         </h1>
-        <div style={{ display: 'flex', gap: 8 }}>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           <input
             ref={importFileRef}
             type="file"
@@ -802,7 +673,7 @@ export default function AdminGroupsPage() {
             onClick={() => importFileRef.current?.click()}
             disabled={importLoading}
           >
-            {importLoading ? 'Импорт...' : 'Импорт из файла'}
+            {importLoading ? 'Импорт...' : 'Импорт группы'}
           </button>
           <button
             className={styles.btnPrimary}
@@ -851,11 +722,12 @@ export default function AdminGroupsPage() {
                 </div>
                 <table className={styles.passwordsTable}>
                   <thead>
-                    <tr><th>Телефон</th><th>Пароль</th></tr>
+                    <tr>ФИО</tr><tr><th>Телефон</th><th>Пароль</th></tr>
                   </thead>
                   <tbody>
                     {d.generatedPasswords.map((r) => (
                       <tr key={r.phone}>
+                        <td>{r.fullName}</td>
                         <td>{r.phone}</td>
                         <td className={styles.passwordCell}>{r.password}</td>
                       </tr>
