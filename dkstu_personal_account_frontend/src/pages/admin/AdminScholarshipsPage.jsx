@@ -11,6 +11,7 @@ import {
 } from '../../api/admin';
 import { getStudentAllGrades } from '../../api/staff';
 import { formatDate } from '../../utils/date';
+import { calcCurrentSemester } from '../../utils/semester';
 import s from '../student/shared.module.css';
 import adminStyles from './AdminUsersPage.module.css';
 import styles from './AdminScholarshipsPage.module.css';
@@ -35,6 +36,43 @@ const DIRECTIONS = [
 ];
 
 const DIRECTION_LABELS = Object.fromEntries(DIRECTIONS.map((d) => [d.value, d.label]));
+
+// Типы, для которых период определяется семестром (все кроме базовой социальной)
+const SEMESTER_BASED_TYPES = new Set(['academic', 'enhanced_academic', 'academic_coeff_1_4', 'academic_coeff_1_5', 'enhanced_social']);
+
+// Период ПОСЛЕ семестра evalSemester (для внутреннего расчёта)
+function calcPeriodAfterSemester(groupYear, evalSemester) {
+  const academicYearStart = groupYear + Math.floor((evalSemester - 1) / 2);
+  const isOdd = evalSemester % 2 === 1;
+  return isOdd
+    ? { periodStart: `${academicYearStart + 1}-02-01`, periodEnd: `${academicYearStart + 1}-06-30` }
+    : { periodStart: `${academicYearStart + 1}-07-01`, periodEnd: `${academicYearStart + 2}-01-31` };
+}
+
+// Период, ВЫПЛАЧИВАЕМЫЙ в displaySemester (тот, что видит пользователь)
+function calcPeriodForSemester(groupYear, displaySemester) {
+  if (displaySemester <= 1) {
+    return { periodStart: `${groupYear}-09-01`, periodEnd: `${groupYear + 1}-01-31` };
+  }
+  return calcPeriodAfterSemester(groupYear, displaySemester - 1);
+}
+
+// Автоматически выбираем текущий семестр; если до его конца < 1 месяц — следующий
+function calcAutoSemester(groupYear) {
+  if (!groupYear) return 1;
+  const currentSem = calcCurrentSemester(groupYear);
+  const { periodEnd } = calcPeriodForSemester(groupYear, currentSem);
+  const today = new Date().toISOString().split('T')[0];
+  const endDate = new Date(periodEnd + 'T00:00:00Z');
+  endDate.setUTCMonth(endDate.getUTCMonth() - 1);
+  return today >= endDate.toISOString().split('T')[0] ? currentSem + 1 : currentSem;
+}
+
+function fmtPeriodDate(iso) {
+  return new Date(iso + 'T00:00:00Z').toLocaleDateString('ru-RU', {
+    day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC',
+  });
+}
 
 function formatAmount(amount) {
   return new Intl.NumberFormat('ru-RU', {
@@ -61,8 +99,11 @@ function getBaseForType(type, direction, baseAmounts) {
 
 // ─── Scholarship form ─────────────────────────────────────────────────────────
 
-function ScholarshipForm({ initial, hasDebts, baseAmounts, onSave, onCancel, loading, error }) {
+function ScholarshipForm({ initial, hasDebts, baseAmounts, onSave, onCancel, loading, error, studentGroups }) {
+  const groupYear = studentGroups?.[0]?.year;
   const defaultType = hasDebts ? 'social' : 'academic';
+  const autoSemester = groupYear ? calcAutoSemester(groupYear) : 1;
+
   const [form, setForm] = useState(
     initial
       ? {
@@ -72,42 +113,63 @@ function ScholarshipForm({ initial, hasDebts, baseAmounts, onSave, onCancel, loa
           periodStart: initial.periodStart ? initial.periodStart.slice(0, 10) : '',
           periodEnd: initial.periodEnd ? initial.periodEnd.slice(0, 10) : '',
           isActive: initial.isActive !== undefined ? initial.isActive : true,
+          semester: autoSemester,
         }
-      : { type: defaultType, direction: '', amount: '', periodStart: '', periodEnd: '', isActive: true },
+      : { type: defaultType, direction: '', amount: '', periodStart: '', periodEnd: '', isActive: true, semester: autoSemester },
   );
 
   const set = (field, val) => setForm((f) => ({ ...f, [field]: val }));
+
+  const isCreating = !initial;
+  // Используем выбор семестра для всех типов кроме базовой социальной, если известен год набора
+  const useSemesterPicker = groupYear && SEMESTER_BASED_TYPES.has(form.type);
 
   const baseAmount = getBaseForType(form.type, form.direction || null, baseAmounts);
   const isCoeff = form.type === 'academic_coeff_1_4' || form.type === 'academic_coeff_1_5';
   const needsDirection = form.type === 'enhanced_academic' || form.type === 'enhanced_social';
 
-  const availableTypes = hasDebts && !initial
+  const availableTypes = hasDebts && isCreating
     ? SCHOLARSHIP_TYPES.filter((t) => t.value === 'social')
     : SCHOLARSHIP_TYPES;
+
+  const maxSemesterOption = groupYear ? Math.max(autoSemester + 1, 8) : 12;
 
   const handleSubmit = (e) => {
     e.preventDefault();
     const payload = {};
-    if (!initial) {
+    if (isCreating) {
       payload.type = form.type;
-      payload.periodStart = form.periodStart;
       if (form.direction) payload.direction = form.direction;
       if (form.amount !== '') payload.amount = Number(form.amount);
-      if (form.periodEnd) payload.periodEnd = form.periodEnd;
+      if (useSemesterPicker) {
+        const { periodStart, periodEnd } = calcPeriodForSemester(groupYear, form.semester);
+        payload.periodStart = periodStart;
+        payload.periodEnd = periodEnd;
+      } else {
+        payload.periodStart = form.periodStart;
+        if (form.periodEnd) payload.periodEnd = form.periodEnd;
+      }
     } else {
-      if (form.periodStart) payload.periodStart = form.periodStart;
+      if (useSemesterPicker) {
+        const { periodStart, periodEnd } = calcPeriodForSemester(groupYear, form.semester);
+        payload.periodStart = periodStart;
+        payload.periodEnd = periodEnd;
+      } else {
+        if (form.periodStart) payload.periodStart = form.periodStart;
+        payload.periodEnd = form.periodEnd || null;
+      }
       payload.direction = form.direction || null;
       if (form.amount !== '') payload.amount = Number(form.amount);
-      payload.periodEnd = form.periodEnd || null;
       payload.isActive = form.isActive;
     }
     onSave(payload);
   };
 
+  const semesterPeriod = useSemesterPicker ? calcPeriodForSemester(groupYear, form.semester) : null;
+
   return (
     <form onSubmit={handleSubmit} className={adminStyles.form}>
-      {!initial && (
+      {isCreating && (
         <div className={adminStyles.formRow}>
           <label className={adminStyles.label}>Вид стипендии</label>
           <select
@@ -144,9 +206,7 @@ function ScholarshipForm({ initial, hasDebts, baseAmounts, onSave, onCancel, loa
         <label className={adminStyles.label}>
           Сумма (₽)
           {isCoeff && baseAmount !== undefined && (
-            <span style={{ color: '#16a34a', marginLeft: 6 }}>
-              авто: {formatAmount(baseAmount)}
-            </span>
+            <span style={{ color: '#16a34a', marginLeft: 6 }}>авто: {formatAmount(baseAmount)}</span>
           )}
           {!isCoeff && baseAmount !== undefined && ` — базовый: ${formatAmount(baseAmount)}`}
         </label>
@@ -164,29 +224,55 @@ function ScholarshipForm({ initial, hasDebts, baseAmounts, onSave, onCancel, loa
               ? `По умолчанию: ${baseAmount}`
               : 'Обязательно'
           }
-          required={baseAmount === undefined && !initial && !isCoeff}
+          required={baseAmount === undefined && isCreating && !isCoeff}
         />
       </div>
-      <div className={adminStyles.formRow}>
-        <label className={adminStyles.label}>Начало периода</label>
-        <input
-          className={adminStyles.input}
-          type="date"
-          value={form.periodStart}
-          onChange={(e) => set('periodStart', e.target.value)}
-          required={!initial}
-        />
-      </div>
-      <div className={adminStyles.formRow}>
-        <label className={adminStyles.label}>Конец периода</label>
-        <input
-          className={adminStyles.input}
-          type="date"
-          value={form.periodEnd}
-          onChange={(e) => set('periodEnd', e.target.value)}
-        />
-      </div>
-      {initial && (
+
+      {useSemesterPicker ? (
+        <div className={adminStyles.formRow}>
+          <label className={adminStyles.label}>Семестр</label>
+          <div className={styles.semesterPickerRow}>
+            <select
+              className={`${adminStyles.select} ${styles.semesterSelectSmall}`}
+              value={form.semester}
+              onChange={(e) => set('semester', Number(e.target.value))}
+            >
+              {Array.from({ length: maxSemesterOption }, (_, i) => i + 1).map((sem) => (
+                <option key={sem} value={sem}>{sem}</option>
+              ))}
+            </select>
+            {semesterPeriod && (
+              <span className={styles.semesterHint}>
+                {fmtPeriodDate(semesterPeriod.periodStart)} – {fmtPeriodDate(semesterPeriod.periodEnd)}
+              </span>
+            )}
+          </div>
+        </div>
+      ) : (
+        <div className={styles.periodRow}>
+          <div className={adminStyles.formRow}>
+            <label className={adminStyles.label}>Начало периода</label>
+            <input
+              className={adminStyles.input}
+              type="date"
+              value={form.periodStart}
+              onChange={(e) => set('periodStart', e.target.value)}
+              required={isCreating}
+            />
+          </div>
+          <div className={adminStyles.formRow}>
+            <label className={adminStyles.label}>Конец периода</label>
+            <input
+              className={adminStyles.input}
+              type="date"
+              value={form.periodEnd}
+              onChange={(e) => set('periodEnd', e.target.value)}
+            />
+          </div>
+        </div>
+      )}
+
+      {!isCreating && (
         <div className={adminStyles.formRow}>
           <label className={adminStyles.checkLabel}>
             <input
@@ -201,7 +287,7 @@ function ScholarshipForm({ initial, hasDebts, baseAmounts, onSave, onCancel, loa
       {error && <p className={s.errorMsg}>{error}</p>}
       <div className={adminStyles.formActions}>
         <button type="submit" className={adminStyles.btnPrimary} disabled={loading}>
-          {loading ? 'Сохранение...' : initial ? 'Сохранить' : 'Назначить'}
+          {loading ? 'Сохранение...' : isCreating ? 'Назначить' : 'Сохранить'}
         </button>
         <button type="button" className={adminStyles.btnSecondary} onClick={onCancel} disabled={loading}>
           Отмена
@@ -607,12 +693,18 @@ export default function AdminScholarshipsPage() {
                           onCancel={() => { setMode(null); setEditingId(null); setFormError(''); }}
                           loading={formLoading}
                           error={formError}
+                          studentGroups={selectedStudent?.groups}
                         />
                       </div>
                     ) : (
                       <div key={sc.id} className={styles.scholarshipCard}>
                         <div className={styles.schCardHeader}>
-                          <span className={styles.schType}>{TYPE_LABELS[sc.type] || sc.type}</span>
+                          <span className={styles.schType}>
+                            {TYPE_LABELS[sc.type] || sc.type}
+                            {sc.autoAssigned && (
+                              <span className={styles.schBadgeAuto} title="Назначена автоматически по итогам сессии">Авто</span>
+                            )}
+                          </span>
                           <span
                             className={styles.schStatus}
                             style={{ color: sc.isActive ? '#16a34a' : '#9ca3af' }}
@@ -667,6 +759,7 @@ export default function AdminScholarshipsPage() {
                         onCancel={() => { setMode(null); setFormError(''); }}
                         loading={formLoading}
                         error={formError}
+                        studentGroups={selectedStudent?.groups}
                       />
                     </div>
                   ) : (

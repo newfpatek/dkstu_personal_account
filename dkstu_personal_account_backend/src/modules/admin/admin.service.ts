@@ -33,6 +33,18 @@ import { UpdateScholarshipDto } from './dto/update-scholarship.dto';
 
 @Injectable()
 export class AdminService implements OnModuleInit {
+  private static readonly ACADEMIC_TYPES: ScholarshipType[] = [
+    ScholarshipType.ACADEMIC,
+    ScholarshipType.ACADEMIC_COEFF_14,
+    ScholarshipType.ACADEMIC_COEFF_15,
+    ScholarshipType.ENHANCED_ACADEMIC,
+  ];
+
+  private static readonly SOCIAL_TYPES: ScholarshipType[] = [
+    ScholarshipType.SOCIAL,
+    ScholarshipType.ENHANCED_SOCIAL,
+  ];
+
   constructor(
     @InjectRepository(User)
     private readonly userRepo: Repository<User>,
@@ -61,6 +73,12 @@ export class AdminService implements OnModuleInit {
       await this.upsertBaseAmount(ScholarshipType.ACADEMIC_COEFF_14, null, Math.round(amount * 1.4 * 100) / 100);
       await this.upsertBaseAmount(ScholarshipType.ACADEMIC_COEFF_15, null, Math.round(amount * 1.5 * 100) / 100);
     }
+    // Удаление просроченных стипендий при старте и ежесуточно
+    await this.cleanupExpiredScholarships();
+    setInterval(() => { void this.cleanupExpiredScholarships(); }, 24 * 60 * 60 * 1000);
+    // Авто-назначение стипендий при старте и ежесуточно (подхватывает опоздавшие оценки)
+    void this.runStartupScholarshipCheck();
+    setInterval(() => { void this.runStartupScholarshipCheck(); }, 24 * 60 * 60 * 1000);
   }
 
   // ─── Users ───────────────────────────────────────────────────────────────
@@ -234,15 +252,43 @@ export class AdminService implements OnModuleInit {
     const group = await this.groupRepo.findOne({ where: { id: groupId }, relations: { members: true } });
     if (!group) throw new NotFoundException('Группа не найдена');
 
-    const user = await this.userRepo.findOne({ where: { id: userId } });
+    const user = await this.userRepo
+      .createQueryBuilder('u')
+      .leftJoinAndSelect('u.groups', 'g')
+      .where('u.id = :userId', { userId })
+      .getOne();
     if (!user) throw new NotFoundException('Пользователь не найден');
 
     const alreadyIn = group.members.some((m) => m.id === userId);
     if (alreadyIn) throw new ConflictException('Пользователь уже в группе');
 
+    // Для студентов: перевод из предыдущих групп
+    let wasTransferred = false;
+    if (user.role === Role.STUDENT) {
+      const previousGroups = (user.groups ?? []).filter((g) => g.id !== groupId);
+      for (const oldGroup of previousGroups) {
+        const og = await this.groupRepo.findOne({
+          where: { id: oldGroup.id },
+          relations: { members: true },
+        });
+        if (og) {
+          og.members = og.members.filter((m) => m.id !== userId);
+          await this.groupRepo.save(og);
+          await this.userGroupRoleRepo.delete({ userId, groupId: oldGroup.id });
+        }
+      }
+      if (previousGroups.length > 0) wasTransferred = true;
+    }
+
     group.members.push(user);
     await this.groupRepo.save(group);
-    return { message: 'Пользователь добавлен в группу' };
+
+    // Создаём долги за прошлые семестры нового плана (async, не блокируем ответ)
+    if (user.role === Role.STUDENT) {
+      void this.createAbsentGradesForTransfer(userId, group);
+    }
+
+    return { message: wasTransferred ? 'Студент переведён в группу' : 'Пользователь добавлен в группу' };
   }
 
   async removeUserFromGroup(groupId: string, userId: string): Promise<{ message: string }> {
@@ -331,16 +377,20 @@ export class AdminService implements OnModuleInit {
     if (!student) throw new NotFoundException('Студент не найден');
 
     if (student.isPaid) {
-      throw new BadRequestException(
-        'Студент обучается на платной основе — назначение стипендии недоступно',
-      );
+      throw new BadRequestException('Студент обучается на платной основе — назначение стипендии недоступно');
     }
 
     const debtCount = await this.gradeRecordRepo.count({ where: { studentId, isDebt: true } });
-    if (debtCount > 0 && dto.type !== ScholarshipType.SOCIAL) {
-      throw new BadRequestException(
-        'У студента есть академические задолженности — допускается только социальная стипендия',
-      );
+    if (debtCount > 0 && dto.type !== ScholarshipType.SOCIAL && dto.type !== ScholarshipType.ENHANCED_SOCIAL) {
+      throw new BadRequestException('У студента есть академические задолженности — допускается только социальная стипендия');
+    }
+
+    if (AdminService.ACADEMIC_TYPES.includes(dto.type)) {
+      await this.validateAcademicScholarshipEligibility(studentId, dto.periodStart);
+    }
+
+    if (dto.type === ScholarshipType.ENHANCED_SOCIAL) {
+      await this.validateEnhancedSocialEligibility(studentId);
     }
 
     let amount = dto.amount;
@@ -356,8 +406,13 @@ export class AdminService implements OnModuleInit {
       periodStart: dto.periodStart,
       periodEnd: dto.periodEnd ?? null,
       isActive: true,
+      autoAssigned: false,
     });
-    return this.scholarshipRepo.save(record);
+    const saved = await this.scholarshipRepo.save(record);
+
+    await this.handleScholarshipConflicts(studentId, dto.type, saved.id, dto.periodStart, dto.periodEnd ?? null);
+
+    return saved;
   }
 
   async updateScholarship(studentId: string, id: string, dto: UpdateScholarshipDto): Promise<Scholarship> {
@@ -469,10 +524,20 @@ export class AdminService implements OnModuleInit {
       }
 
       const debtCount = await this.gradeRecordRepo.count({ where: { studentId: student.id, isDebt: true } });
-      if (debtCount > 0 && schType !== ScholarshipType.SOCIAL) {
+      if (debtCount > 0 && schType !== ScholarshipType.SOCIAL && schType !== ScholarshipType.ENHANCED_SOCIAL) {
         errors.push(`${studentLabel}: есть академические задолженности (${debtCount} шт.) — допускается только социальная стипендия`);
         skipped++;
         continue;
+      }
+
+      if (AdminService.ACADEMIC_TYPES.includes(schType)) {
+        try {
+          await this.validateAcademicScholarshipEligibility(student.id, rec.periodStart);
+        } catch (e: unknown) {
+          errors.push(`${studentLabel}: ${e instanceof Error ? e.message : String(e)}`);
+          skipped++;
+          continue;
+        }
       }
 
       const normalizedDir = this.normalizeDirection(rec.direction);
@@ -492,7 +557,17 @@ export class AdminService implements OnModuleInit {
         }
       }
 
-      await this.scholarshipRepo.save(
+      if (schType === ScholarshipType.ENHANCED_SOCIAL) {
+        try {
+          await this.validateEnhancedSocialEligibility(student.id);
+        } catch (e: unknown) {
+          errors.push(`${studentLabel}: ${e instanceof Error ? e.message : String(e)}`);
+          skipped++;
+          continue;
+        }
+      }
+
+      const saved = await this.scholarshipRepo.save(
         this.scholarshipRepo.create({
           studentId: student.id,
           type: schType,
@@ -501,8 +576,10 @@ export class AdminService implements OnModuleInit {
           periodStart: rec.periodStart,
           periodEnd: rec.periodEnd ?? null,
           isActive: true,
+          autoAssigned: false,
         }),
       );
+      await this.handleScholarshipConflicts(student.id, schType, saved.id, rec.periodStart, rec.periodEnd ?? null);
       created++;
     }
 
@@ -578,6 +655,7 @@ export class AdminService implements OnModuleInit {
   }
 
   async upsertGrades(dto: {
+    groupId: string;
     disciplineId: string;
     semester: number;
     grades: Array<{ studentId: string; gradeValue: string | null }>;
@@ -611,6 +689,11 @@ export class AdminService implements OnModuleInit {
         );
       }
       saved++;
+    }
+
+    // Проверяем закрытие семестра и авто-назначение стипендий (не блокируем ответ)
+    if (dto.groupId) {
+      void this.checkAndAutoAssignScholarships(dto.groupId, dto.semester);
     }
 
     return { saved, cleared };
@@ -657,6 +740,7 @@ export class AdminService implements OnModuleInit {
     let saved = 0;
     let skipped = 0;
     const errors: string[] = [];
+    const affectedPairs = new Set<string>(); // "studentId:semester"
 
     for (const row of rows) {
       if (!row.gradeBook || !row.semester || !row.disciplineName || !row.grade) {
@@ -705,7 +789,11 @@ export class AdminService implements OnModuleInit {
         );
       }
       saved++;
+      affectedPairs.add(`${student.id}:${row.semester}`);
     }
+
+    // Определяем затронутые группы и запускаем пересчёт стипендий
+    void this.triggerScholarshipRecalcForPairs(affectedPairs);
 
     return { saved, skipped, errors };
   }
@@ -774,6 +862,10 @@ export class AdminService implements OnModuleInit {
         this.groupSemDisciplineRepo.create({ groupId: dto.groupId, disciplineId, semester: dto.semester }),
       );
       assigned++;
+    }
+
+    if (dto.semester === 1) {
+      void this.autoAssignSemester1(dto.groupId);
     }
 
     return { assigned, skipped };
@@ -881,6 +973,11 @@ export class AdminService implements OnModuleInit {
           }),
         );
         assigned++;
+      }
+
+      // Автоназначение базовой академической стипендии для 1-го семестра
+      if (group && item.semester === 1) {
+        void this.autoAssignSemester1(group.id);
       }
     }
 
@@ -1452,5 +1549,449 @@ export class AdminService implements OnModuleInit {
       }
     }
     return users;
+  }
+
+  // ─── Auto-scholarship helpers ─────────────────────────────────────────────
+
+  private todayStr(): string {
+    return new Date().toISOString().split('T')[0];
+  }
+
+  private async cleanupExpiredScholarships(): Promise<void> {
+    const today = this.todayStr();
+    await this.scholarshipRepo
+      .createQueryBuilder()
+      .delete()
+      .where('period_end IS NOT NULL')
+      .andWhere('period_end < :today', { today })
+      .execute();
+  }
+
+  // Проверяет и авто-назначает стипендии для текущего семестра при старте сервера
+  private async runStartupScholarshipCheck(): Promise<void> {
+    const groups = await this.groupRepo.find({ relations: { members: true } });
+    for (const group of groups) {
+      const prevSem = this.calcCurrentSemester(group.year) - 1;
+      if (prevSem < 1) continue;
+      const hasPlan = await this.groupSemDisciplineRepo.count({
+        where: { groupId: group.id, semester: prevSem },
+      });
+      if (hasPlan > 0) {
+        await this.checkAndAutoAssignScholarships(group.id, prevSem, true);
+      }
+    }
+  }
+
+  private async handleScholarshipConflicts(
+    studentId: string,
+    type: ScholarshipType,
+    excludeId: string,
+    periodStart: string,
+    periodEnd?: string | null,
+  ): Promise<void> {
+    const isAcademic = AdminService.ACADEMIC_TYPES.includes(type);
+    const isSocial = AdminService.SOCIAL_TYPES.includes(type);
+    if (!isAcademic && !isSocial) return;
+
+    const sameCategory = isAcademic ? AdminService.ACADEMIC_TYPES : AdminService.SOCIAL_TYPES;
+
+    // Удаляем все стипендии той же категории с перекрывающимся периодом
+    // Два периода перекрываются: existing.end >= new.start AND existing.start <= new.end
+    const qb = this.scholarshipRepo
+      .createQueryBuilder()
+      .delete()
+      .where('student_id = :sid', { sid: studentId })
+      .andWhere('id != :excludeId', { excludeId })
+      .andWhere('type IN (:...sameCategory)', { sameCategory })
+      .andWhere('(period_end IS NULL OR period_end >= :ps)', { ps: periodStart });
+
+    if (periodEnd) {
+      qb.andWhere('period_start <= :pe', { pe: periodEnd });
+    }
+
+    await qb.execute();
+  }
+
+  private async validateEnhancedSocialEligibility(studentId: string): Promise<void> {
+    const user = await this.userRepo
+      .createQueryBuilder('u')
+      .leftJoinAndSelect('u.groups', 'g')
+      .where('u.id = :id', { id: studentId })
+      .getOne();
+
+    const groups = user?.groups ?? [];
+    if (!groups.length) {
+      throw new BadRequestException('У студента нет группы — невозможно определить курс для повышенной социальной стипендии');
+    }
+
+    const currentSemester = this.calcCurrentSemester(groups[0].year);
+    if (currentSemester < 2 || currentSemester > 4) {
+      throw new BadRequestException(
+        `Повышенная социальная стипендия доступна только для 1–2 курса (2–4 семестры). Студент в ${currentSemester} семестре`,
+      );
+    }
+
+    const lastSemester = await this.getStudentLastClosedSemester(studentId);
+    if (lastSemester !== null) {
+      const lastGrades = await this.gradeRecordRepo.find({ where: { studentId, semester: lastSemester } });
+      const hasDebt = lastGrades.some((g) => g.isDebt);
+      const hasSatisfactory = lastGrades.some((g) => g.gradeValue === GradeValue.SATISFACTORY);
+      if (hasDebt || hasSatisfactory) {
+        throw new BadRequestException(
+          `Повышенная социальная стипендия не назначается: задолженности или оценка «удовлетворительно» в ${lastSemester} семестре`,
+        );
+      }
+    }
+  }
+
+  private async getStudentLastClosedSemester(studentId: string): Promise<number | null> {
+    const result = await this.gradeRecordRepo
+      .createQueryBuilder('gr')
+      .select('MAX(gr.semester)', 'maxSem')
+      .where('gr.studentId = :studentId', { studentId })
+      .getRawOne<{ maxSem: number | null }>();
+    const val = result?.maxSem;
+    return val != null ? Number(val) : null;
+  }
+
+  private calcCurrentSemester(enrollmentYear: number): number {
+    const now = new Date();
+    const month = now.getMonth() + 1;
+    const year = now.getFullYear();
+    const isOdd = month >= 9 || month === 1;
+    const academicYearStart = month >= 9 ? year : year - 1;
+    const yearsElapsed = academicYearStart - enrollmentYear;
+    const semester = yearsElapsed * 2 + (isOdd ? 1 : 2);
+    if (!isFinite(semester) || semester < 1) return 1;
+    return semester;
+  }
+
+  private findSemesterForPeriodStart(groupYear: number, periodStart: string): number | null {
+    for (let sem = 1; sem <= 12; sem++) {
+      if (this.getScholarshipPeriodAfterSemester(groupYear, sem).periodStart === periodStart) return sem;
+    }
+    return null;
+  }
+
+  private async validateAcademicScholarshipEligibility(studentId: string, periodStart: string): Promise<void> {
+    const user = await this.userRepo
+      .createQueryBuilder('u')
+      .leftJoinAndSelect('u.groups', 'g')
+      .where('u.id = :studentId', { studentId })
+      .getOne();
+
+    if (!user?.groups?.length) return;
+
+    const group = user.groups[0];
+    const semester = this.findSemesterForPeriodStart(group.year, periodStart);
+    if (semester === null) return;
+
+    const plannedDiscs = await this.groupSemDisciplineRepo.find({
+      where: { groupId: group.id, semester },
+      select: { disciplineId: true },
+    });
+    if (!plannedDiscs.length) return;
+
+    const discIds = plannedDiscs.map((d) => d.disciplineId);
+
+    const blockingCount = await this.gradeRecordRepo
+      .createQueryBuilder('gr')
+      .where('gr.studentId = :studentId', { studentId })
+      .andWhere('gr.semester = :semester', { semester })
+      .andWhere('gr.disciplineId IN (:...discIds)', { discIds })
+      .andWhere('(gr.gradeValue = :sat OR gr.isDebt = true)', { sat: GradeValue.SATISFACTORY })
+      .getCount();
+
+    if (blockingCount > 0) {
+      throw new BadRequestException(
+        `За ${semester} семестр у студента есть оценка «Удовлетворительно» или академические задолженности — академическая стипендия за этот период не может быть назначена`,
+      );
+    }
+  }
+
+  private getScholarshipPeriodAfterSemester(
+    groupYear: number,
+    semester: number,
+  ): { periodStart: string; periodEnd: string } {
+    const academicYearStart = groupYear + Math.floor((semester - 1) / 2);
+    const isOdd = semester % 2 === 1;
+    if (isOdd) {
+      return {
+        periodStart: `${academicYearStart + 1}-02-01`,
+        periodEnd: `${academicYearStart + 1}-06-30`,
+      };
+    } else {
+      return {
+        periodStart: `${academicYearStart + 1}-07-01`,
+        periodEnd: `${academicYearStart + 2}-01-31`,
+      };
+    }
+  }
+
+  private calculateAcademicEligibility(
+    grades: GradeRecord[],
+    plannedDiscs: GroupSemesterDiscipline[],
+  ): ScholarshipType.ACADEMIC | ScholarshipType.ACADEMIC_COEFF_14 | ScholarshipType.ACADEMIC_COEFF_15 | null {
+    if (grades.some((g) => g.isDebt)) return null;
+    if (grades.some((g) => g.gradeValue === GradeValue.SATISFACTORY)) return null;
+
+    const examDiscIds = new Set(
+      plannedDiscs
+        .filter((d) => d.discipline?.disciplineType === DisciplineType.EXAM)
+        .map((d) => d.disciplineId),
+    );
+    const examGrades = grades.filter((g) => examDiscIds.has(g.disciplineId));
+
+    if (examGrades.length === 0) return ScholarshipType.ACADEMIC;
+
+    const allGoodOrExcellent = examGrades.every(
+      (g) => g.gradeValue === GradeValue.EXCELLENT || g.gradeValue === GradeValue.GOOD,
+    );
+    if (!allGoodOrExcellent) return null;
+
+    const allExcellent = examGrades.every((g) => g.gradeValue === GradeValue.EXCELLENT);
+    if (allExcellent) return ScholarshipType.ACADEMIC_COEFF_15;
+
+    const goodCount = examGrades.filter((g) => g.gradeValue === GradeValue.GOOD).length;
+    if (goodCount === 1) return ScholarshipType.ACADEMIC_COEFF_14;
+
+    return ScholarshipType.ACADEMIC;
+  }
+
+  async checkAndAutoAssignScholarships(groupId: string, semester: number, allowPastPeriod: boolean = false): Promise<void> {
+    const group = await this.groupRepo
+      .createQueryBuilder('g')
+      .leftJoinAndSelect('g.members', 'm')
+      .where('g.id = :groupId', { groupId })
+      .getOne();
+    if (!group) return;
+
+    const students = (group.members ?? []).filter((m) => m.role === Role.STUDENT && !m.isPaid);
+    if (!students.length) return;
+
+    const plannedDiscs = await this.groupSemDisciplineRepo
+      .createQueryBuilder('gsd')
+      .leftJoinAndSelect('gsd.discipline', 'd')
+      .where('gsd.groupId = :groupId', { groupId })
+      .andWhere('gsd.semester = :semester', { semester })
+      .getMany();
+
+    if (!plannedDiscs.length) return;
+
+    // Не назначаем стипендию после последнего семестра учебного плана
+    const maxSemMap = await this.getGroupMaxSemesters([groupId]);
+    const maxSem = maxSemMap.get(groupId) ?? null;
+    if (maxSem !== null && semester >= maxSem) return;
+
+    const period = this.getScholarshipPeriodAfterSemester(group.year, semester);
+    const today = this.todayStr();
+    if (today > period.periodEnd) return;
+    // Не создаём/удаляем стипендию задним числом: если период уже начался (новый семестр идёт) и вызов не из перевода — пропускаем
+    if (!allowPastPeriod && today >= period.periodStart) return;
+
+    const disciplineIds = plannedDiscs.map((d) => d.disciplineId);
+    const disciplineIdSet = new Set(disciplineIds);
+
+    for (const student of students) {
+      const grades = await this.gradeRecordRepo.find({
+        where: { studentId: student.id, semester },
+        relations: { discipline: true },
+      });
+
+      const gradedIds = new Set(grades.map((g) => g.disciplineId));
+      const allGraded = disciplineIds.every((id) => gradedIds.has(id));
+      if (!allGraded) continue;
+
+      // Учитываем только оценки по дисциплинам текущего плана — старые оценки из прежней группы не влияют
+      const planGrades = grades.filter((g) => disciplineIdSet.has(g.disciplineId));
+      const eligibleType = this.calculateAcademicEligibility(planGrades, plannedDiscs);
+
+      const hasEnhancedAcademic = await this.scholarshipRepo.count({
+        where: { studentId: student.id, type: ScholarshipType.ENHANCED_ACADEMIC },
+      });
+
+      // Удаляем старую авто-назначенную академическую стипендию для этого периода
+      await this.scholarshipRepo
+        .createQueryBuilder()
+        .delete()
+        .where('student_id = :sid', { sid: student.id })
+        .andWhere('auto_assigned = true')
+        .andWhere('type IN (:...types)', {
+          types: [ScholarshipType.ACADEMIC, ScholarshipType.ACADEMIC_COEFF_14, ScholarshipType.ACADEMIC_COEFF_15],
+        })
+        .andWhere('period_start = :ps', { ps: period.periodStart })
+        .execute();
+
+      if (hasEnhancedAcademic || !eligibleType) continue;
+
+      let amount: number;
+      try {
+        amount = await this.resolveBaseAmount(eligibleType, null);
+      } catch {
+        continue;
+      }
+
+      await this.scholarshipRepo.save(
+        this.scholarshipRepo.create({
+          studentId: student.id,
+          type: eligibleType,
+          direction: null,
+          amount,
+          periodStart: period.periodStart,
+          periodEnd: period.periodEnd,
+          isActive: true,
+          autoAssigned: true,
+        }),
+      );
+    }
+  }
+
+  private async autoAssignSemester1(groupId: string): Promise<void> {
+    const group = await this.groupRepo
+      .createQueryBuilder('g')
+      .leftJoinAndSelect('g.members', 'm')
+      .where('g.id = :groupId', { groupId })
+      .getOne();
+    if (!group) return;
+
+    const students = (group.members ?? []).filter((m) => m.role === Role.STUDENT && !m.isPaid);
+    if (!students.length) return;
+
+    const periodStart = `${group.year}-09-01`;
+    const periodEnd = `${group.year + 1}-01-31`;
+    const today = this.todayStr();
+    if (today > periodEnd) return;
+
+    let amount: number;
+    try {
+      amount = await this.resolveBaseAmount(ScholarshipType.ACADEMIC, null);
+    } catch {
+      return;
+    }
+
+    for (const student of students) {
+      const existing = await this.scholarshipRepo.findOne({
+        where: { studentId: student.id, type: ScholarshipType.ACADEMIC, autoAssigned: true, periodStart },
+      });
+      if (existing) continue;
+
+      const hasEnhancedAcademic = await this.scholarshipRepo.count({
+        where: { studentId: student.id, type: ScholarshipType.ENHANCED_ACADEMIC },
+      });
+      if (hasEnhancedAcademic) continue;
+
+      await this.scholarshipRepo.save(
+        this.scholarshipRepo.create({
+          studentId: student.id,
+          type: ScholarshipType.ACADEMIC,
+          direction: null,
+          amount,
+          periodStart,
+          periodEnd,
+          isActive: true,
+          autoAssigned: true,
+        }),
+      );
+    }
+  }
+
+  private async triggerScholarshipRecalcForPairs(pairs: Set<string>): Promise<void> {
+    const checked = new Set<string>();
+    for (const pair of pairs) {
+      const [studentId, semStr] = pair.split(':');
+      const semester = Number(semStr);
+
+      const groups = await this.groupRepo
+        .createQueryBuilder('g')
+        .innerJoin('g.members', 'm', 'm.id = :uid', { uid: studentId })
+        .getMany();
+
+      for (const group of groups) {
+        const key = `${group.id}:${semester}`;
+        if (checked.has(key)) continue;
+        checked.add(key);
+
+        const hasPlan = await this.groupSemDisciplineRepo.count({
+          where: { groupId: group.id, semester },
+        });
+        if (hasPlan > 0) {
+          await this.checkAndAutoAssignScholarships(group.id, semester);
+        }
+      }
+    }
+  }
+
+  private async createAbsentGradesForTransfer(studentId: string, group: { id: string; year: number }): Promise<void> {
+    // 1. Удаляем absent/absent_exam оценки за дисциплины, которых нет в плане новой группы.
+    //    Такие оценки были авто-созданы при предыдущем переводе в другую группу.
+    const newGroupPlan = await this.groupSemDisciplineRepo.find({
+      where: { groupId: group.id },
+      select: { disciplineId: true },
+    });
+    const newPlanIds = new Set(newGroupPlan.map((p) => p.disciplineId));
+
+    if (newPlanIds.size > 0) {
+      const staleAbsent = await this.gradeRecordRepo
+        .createQueryBuilder('gr')
+        .where('gr.studentId = :sid', { sid: studentId })
+        .andWhere('gr.gradeValue IN (:...vals)', { vals: [GradeValue.ABSENT, GradeValue.ABSENT_EXAM] })
+        .andWhere('gr.disciplineId NOT IN (:...planIds)', { planIds: [...newPlanIds] })
+        .getMany();
+      if (staleAbsent.length > 0) {
+        await this.gradeRecordRepo.remove(staleAbsent);
+      }
+    }
+
+    // 2. Сбрасываем все незакончившиеся авто-стипендии студента — они будут пересчитаны ниже.
+    //    Это исправляет случай, когда долг появился в семестре N, а стипендия была за период N+1..M.
+    const today = this.todayStr();
+    await this.scholarshipRepo
+      .createQueryBuilder()
+      .delete()
+      .where('student_id = :sid', { sid: studentId })
+      .andWhere('auto_assigned = true')
+      .andWhere('type IN (:...types)', {
+        types: [ScholarshipType.ACADEMIC, ScholarshipType.ACADEMIC_COEFF_14, ScholarshipType.ACADEMIC_COEFF_15],
+      })
+      .andWhere('(period_end IS NULL OR period_end >= :today)', { today })
+      .execute();
+
+    // 3. Создаём absent-оценки за прошлые семестры нового плана, где у студента нет оценок.
+    const currentSemester = this.calcCurrentSemester(group.year);
+    const pastPlanned = await this.groupSemDisciplineRepo
+      .createQueryBuilder('gsd')
+      .leftJoinAndSelect('gsd.discipline', 'd')
+      .where('gsd.groupId = :groupId', { groupId: group.id })
+      .andWhere('gsd.semester < :sem', { sem: currentSemester })
+      .getMany();
+
+    if (!pastPlanned.length) return;
+
+    const existing = await this.gradeRecordRepo.find({ where: { studentId } });
+    const gradedKeys = new Set(existing.map((g) => `${g.disciplineId}:${g.semester}`));
+
+    for (const planned of pastPlanned) {
+      const key = `${planned.disciplineId}:${planned.semester}`;
+      if (gradedKeys.has(key)) continue;
+
+      const absentValue = planned.discipline.disciplineType === DisciplineType.PASS_FAIL
+        ? GradeValue.ABSENT
+        : GradeValue.ABSENT_EXAM;
+
+      await this.gradeRecordRepo.save(
+        this.gradeRecordRepo.create({
+          studentId,
+          disciplineId: planned.disciplineId,
+          semester: planned.semester,
+          gradeValue: absentValue,
+        }),
+      );
+    }
+
+    // 4. Пересчёт стипендий за каждый прошлый семестр нового плана (allowPastPeriod=true — разрешаем создание даже если период уже начался)
+    const pastSemesters = new Set(pastPlanned.map((p) => p.semester));
+    for (const semester of pastSemesters) {
+      await this.checkAndAutoAssignScholarships(group.id, semester, true);
+    }
   }
 }

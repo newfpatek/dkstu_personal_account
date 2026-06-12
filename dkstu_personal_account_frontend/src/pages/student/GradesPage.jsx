@@ -52,19 +52,29 @@ export default function GradesPage() {
   const [historyPlanLoading, setHistoryPlanLoading] = useState(false);
 
   useEffect(() => {
-    Promise.all([getGpa(), getDebts(), getMyCurrentSemesterPlan(), getAllGrades(), getMyGroup()])
-      .then(([gpaRes, debtsRes, planRes, allRes, groupRes]) => {
+    getMyGroup()
+      .then((groupRes) => {
+        const groups = groupRes.data || [];
+        let currentSem;
+        if (groups.length > 0) {
+          const g = groups[0];
+          setGroupYear(g.year);
+          setMaxSemester(g.maxSemester ?? null);
+          currentSem = calcCurrentSemester(g.year);
+          setHistorySemester(currentSem);
+        }
+        return Promise.all([
+          getGpa(),
+          getDebts(),
+          getMyCurrentSemesterPlan(currentSem),
+          getAllGrades(),
+        ]);
+      })
+      .then(([gpaRes, debtsRes, planRes, allRes]) => {
         setGpa(gpaRes.data.gpa);
         setDebts(debtsRes.data);
         setPlan(planRes.data);
         setAllGrades(allRes.data);
-        const groups = groupRes.data;
-        if (groups && groups.length > 0) {
-          const g = groups[0];
-          setGroupYear(g.year);
-          setMaxSemester(g.maxSemester ?? null);
-          setHistorySemester(calcCurrentSemester(g.year));
-        }
       })
       .catch((err) => {
         showToast(getErrorMessage(err, 'Не удалось загрузить данные'));

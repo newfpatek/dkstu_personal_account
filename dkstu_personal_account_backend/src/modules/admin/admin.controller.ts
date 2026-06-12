@@ -179,7 +179,7 @@ export class AdminController {
   }
 
   @Post('grades')
-  upsertGrades(@Body() body: { disciplineId: string; semester: number; grades: Array<{ studentId: string; gradeValue: string | null }> }) {
+  upsertGrades(@Body() body: { groupId: string; disciplineId: string; semester: number; grades: Array<{ studentId: string; gradeValue: string | null }> }) {
     if (!body.disciplineId || !body.semester) {
       throw new BadRequestException('disciplineId и semester обязательны');
     }

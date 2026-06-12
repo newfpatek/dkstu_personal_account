@@ -44,14 +44,38 @@ export class StudentsService {
   ) {}
 
   async getGrades(studentId: string, semester?: number) {
+    const planIds = await this.getPlanDisciplineIds(studentId);
+    if (planIds !== null && planIds.size === 0) return [];
+
     const qb = this.gradeRepo
       .createQueryBuilder('gr')
       .leftJoinAndSelect('gr.discipline', 'discipline')
       .where('gr.studentId = :studentId', { studentId });
 
     if (semester) qb.andWhere('gr.semester = :semester', { semester });
+    if (planIds && planIds.size > 0) {
+      qb.andWhere('gr.disciplineId IN (:...planIds)', { planIds: [...planIds] });
+    }
 
     return qb.orderBy('discipline.name', 'ASC').getMany();
+  }
+
+  private async getPlanDisciplineIds(studentId: string): Promise<Set<string> | null> {
+    const user = await this.userRepo
+      .createQueryBuilder('u')
+      .leftJoinAndSelect('u.groups', 'g')
+      .where('u.id = :studentId', { studentId })
+      .getOne();
+
+    const groupIds = (user?.groups ?? []).map((g) => g.id);
+    if (!groupIds.length) return null;
+
+    const planned = await this.groupSemDisciplineRepo.find({
+      where: { groupId: In(groupIds) },
+      select: { disciplineId: true },
+    });
+
+    return new Set(planned.map((p) => p.disciplineId));
   }
 
   async getCurrentSemesterPlan(studentId: string, semester?: number) {
@@ -117,15 +141,20 @@ export class StudentsService {
     return grouped;
   }
 
-  // Одна запись на дисциплину — берётся из последнего семестра (academicYear DESC, semester DESC)
+  // Одна запись на дисциплину — берётся из последнего семестра, только дисциплины из плана текущей группы
   async getLatestGradesPerDiscipline(studentId: string): Promise<GradeRecord[]> {
+    const planIds = await this.getPlanDisciplineIds(studentId);
+    if (planIds !== null && planIds.size === 0) return [];
+
     const all = await this.gradeRepo.find({
       where: { studentId },
       relations: { discipline: true },
     });
 
+    const filtered = planIds ? all.filter((r) => planIds.has(r.disciplineId)) : all;
+
     const latest = new Map<string, GradeRecord>();
-    for (const r of all) {
+    for (const r of filtered) {
       const prev = latest.get(r.disciplineId);
       if (!prev || this.isLaterSemester(r, prev)) {
         latest.set(r.disciplineId, r);
@@ -153,11 +182,20 @@ export class StudentsService {
   }
 
   async getDebts(studentId: string) {
-    return this.gradeRepo.find({
-      where: { studentId, isDebt: true },
-      relations: { discipline: true },
-      order: { semester: 'DESC' },
-    });
+    const planIds = await this.getPlanDisciplineIds(studentId);
+    if (planIds !== null && planIds.size === 0) return [];
+
+    const qb = this.gradeRepo
+      .createQueryBuilder('gr')
+      .leftJoinAndSelect('gr.discipline', 'discipline')
+      .where('gr.studentId = :studentId', { studentId })
+      .andWhere('gr.isDebt = true');
+
+    if (planIds && planIds.size > 0) {
+      qb.andWhere('gr.disciplineId IN (:...planIds)', { planIds: [...planIds] });
+    }
+
+    return qb.orderBy('gr.semester', 'DESC').getMany();
   }
 
   async getScholarship(studentId: string) {
@@ -166,10 +204,16 @@ export class StudentsService {
 
     if (user.isPaid) return { isPaid: true, scholarships: [] };
 
-    const scholarships = await this.scholarshipRepo.find({
-      where: { studentId, isActive: true },
-      order: { createdAt: 'DESC' },
-    });
+    const today = new Date().toISOString().split('T')[0];
+    const scholarships = await this.scholarshipRepo
+      .createQueryBuilder('s')
+      .where('s.studentId = :studentId', { studentId })
+      .andWhere('s.isActive = true')
+      .andWhere('s.periodStart <= :today', { today })
+      .andWhere('(s.periodEnd IS NULL OR s.periodEnd >= :today)', { today })
+      .orderBy('s.createdAt', 'DESC')
+      .getMany();
+
     return { isPaid: false, scholarships };
   }
 

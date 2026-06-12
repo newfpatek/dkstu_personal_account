@@ -138,6 +138,7 @@ export default function AdminGradesPage() {
         gradeValue: data.localGrades[st.studentId] || null,
       }));
       const res = await upsertGrades({
+        groupId: selectedGroup.id,
         disciplineId: disc.disciplineId,
         semester: Number(semester),
         grades,

@@ -31,6 +31,9 @@ export class Scholarship {
   @Column({ name: 'is_active', default: true })
   isActive!: boolean;
 
+  @Column({ name: 'auto_assigned', default: false })
+  autoAssigned!: boolean;
+
   @CreateDateColumn({ name: 'created_at' })
   createdAt!: Date;
 

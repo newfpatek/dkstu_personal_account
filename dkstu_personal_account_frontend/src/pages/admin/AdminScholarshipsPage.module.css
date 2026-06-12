@@ -1,3 +1,28 @@
+.semesterPickerRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.semesterSelectSmall {
+  width: 72px;
+  flex-shrink: 0;
+}
+
+.semesterHint {
+  font-size: 13px;
+  color: #6b7280;
+}
+
+.periodRow {
+  display: flex;
+  gap: 12px;
+}
+
+.periodRow > div {
+  flex: 1;
+}
+
 /* Base amounts panel */
 .basePanel {
   border: 1px solid var(--border);
@@ -123,6 +148,19 @@
 .schStatus {
   font-size: 12px;
   font-weight: 500;
+}
+
+.schBadgeAuto {
+  display: inline-block;
+  font-size: 10px;
+  font-weight: 600;
+  color: #0369a1;
+  background: #e0f2fe;
+  border-radius: 4px;
+  padding: 1px 6px;
+  margin-left: 6px;
+  vertical-align: middle;
+  letter-spacing: 0.04em;
 }
 
 .schAmount {
