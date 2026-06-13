@@ -197,7 +197,7 @@ function MsgItem({ msg, tab, onToggleRelevance }) {
 
 export default function MessagesPage() {
   const { showToast } = useToast();
-  const currentUserRole = JSON.parse(localStorage.getItem('user') || '{}').role || 'student';
+  const currentUserRole = JSON.parse(sessionStorage.getItem('user') || '{}').role || 'student';
   const isStudent = currentUserRole === 'student';
 
   const [tab, setTab] = useState('inbox');

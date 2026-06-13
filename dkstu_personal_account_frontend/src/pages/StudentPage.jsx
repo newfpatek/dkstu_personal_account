@@ -5,7 +5,7 @@ import styles from './StudentPage.module.css';
 
 export default function StudentPage() {
   const navigate = useNavigate();
-  const user = JSON.parse(localStorage.getItem('user') || '{}');
+  const user = JSON.parse(sessionStorage.getItem('user') || '{}');
   const [groups, setGroups] = useState([]);
 
   useEffect(() => {
@@ -15,8 +15,8 @@ export default function StudentPage() {
   }, []);
 
   const handleLogout = () => {
-    localStorage.removeItem('access_token');
-    localStorage.removeItem('user');
+    sessionStorage.removeItem('access_token');
+    sessionStorage.removeItem('user');
     navigate('/login');
   };
 

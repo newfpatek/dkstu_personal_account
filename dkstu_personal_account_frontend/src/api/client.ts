@@ -8,7 +8,7 @@ export const apiClient = axios.create({
 
 // Перехватчик: автоматически добавляет токен в каждый запрос
 apiClient.interceptors.request.use((config) => {
-  const token = localStorage.getItem('access_token');
+  const token = sessionStorage.getItem('access_token');
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
   }
@@ -22,8 +22,8 @@ apiClient.interceptors.response.use(
       error.response?.status === 401 &&
       !error.config?.url?.includes('/auth/login')
     ) {
-      localStorage.removeItem('access_token');
-      localStorage.removeItem('user');
+      sessionStorage.removeItem('access_token');
+      sessionStorage.removeItem('user');
       window.location.href = '/login';
     }
     return Promise.reject(error);
