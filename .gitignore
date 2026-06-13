@@ -1,5 +1,33 @@
+# Документация Claude AI (не для публичного репозитория)
 CLAUDE.md
 ISSUES.md
+/.claude
+
+# Временные файлы проекта
 start.txt
 /import_examples
-/.claude
+
+# OS — Windows
+Thumbs.db
+Desktop.ini
+ehthumbs.db
+$RECYCLE.BIN/
+
+# OS — macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# IDE — общие
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+*.swp
+
+# IDE — VSCode (глобально, если не настроен в подпапках)
+.vscode/
+
+# IDE — JetBrains
+.idea/

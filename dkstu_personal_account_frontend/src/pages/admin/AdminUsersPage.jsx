@@ -419,7 +419,7 @@ export default function AdminUsersPage() {
     <div>
       {passwordModal && (
         <PasswordModal
-          email={passwordModal.email}
+          phone={passwordModal.phone}
           password={passwordModal.password}
           onClose={() => setPasswordModal(null)}
         />
@@ -439,7 +439,7 @@ export default function AdminUsersPage() {
           </button>
           <button
             className={styles.btnPrimary}
-            onClick={() => { setMode('create'); setSelectedId(null); setSelectedUser(null); setFormError(''); setImportResult(null); }}
+            onClick={() => { setMode('create'); setSelectedId(null); setSelectedUser(null); setImportResult(null); }}
           >
             + Создать пользователя
           </button>
@@ -547,7 +547,7 @@ export default function AdminUsersPage() {
             <div className={styles.panelBox}>
               <UserDetail
                 user={selectedUser}
-                onEdit={() => { setMode('edit'); setFormError(''); }}
+                onEdit={() => { setMode('edit'); }}
                 onDelete={handleDelete}
               />
             </div>

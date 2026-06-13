@@ -1567,7 +1567,7 @@ export class AdminService implements OnModuleInit {
       .createQueryBuilder()
       .delete()
       .where('period_end IS NOT NULL')
-      .andWhere('period_end < :today', { today })
+      .andWhere('period_end <= :today', { today })
       .execute();
   }
 

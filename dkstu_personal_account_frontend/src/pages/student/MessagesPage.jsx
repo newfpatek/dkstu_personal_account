@@ -297,7 +297,7 @@ export default function MessagesPage() {
       // Откатываем оптимистичное изменение и показываем ошибку
       loadRelevant();
       if (irrelevantLoaded) loadIrrelevant(irrelevant.page);
-      showToast('error', 'Не удалось изменить статус сообщения');
+      showToast('Не удалось изменить статус сообщения', 'error');
     }
   };
 

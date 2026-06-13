@@ -10,10 +10,9 @@ export const getGrades = (semester, academicYear) => {
   return apiClient.get('/students/me/grades', { params });
 };
 
-export const getMyCurrentSemesterPlan = (semester, academicYear) => {
+export const getMyCurrentSemesterPlan = (semester) => {
   const params = {};
   if (semester) params.semester = semester;
-  if (academicYear) params.academicYear = academicYear;
   return apiClient.get('/students/me/grades/current', { params });
 };
 
