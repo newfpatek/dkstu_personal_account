@@ -23,6 +23,13 @@
   text-align: center;
 }
 
+.nameRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
 .roleTag {
   display: inline-block;
   padding: 2px 10px;

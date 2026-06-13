@@ -290,30 +290,9 @@ function ImportResult({ result, onClose }) {
 
       {hasPasswords && (
         <div className={styles.passwordsBlock}>
-          <div className={styles.passwordsHeader}>
-            <span>Сгенерированные пароли</span>
-            <button className={styles.btnDownload} onClick={handleDownload}>
-              Скачать Excel
-            </button>
-          </div>
-          <table className={styles.passwordsTable}>
-            <thead>
-              <tr>
-                <th>ФИО</th>
-                <th>Телефон</th>
-                <th>Пароль</th>
-              </tr>
-            </thead>
-            <tbody>
-              {result.generatedPasswords.map((r) => (
-                <tr key={r.phone}>
-                  <td>{r.fullName}</td>
-                  <td>{r.phone}</td>
-                  <td className={styles.passwordCell}>{r.password}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <button className={styles.btnDownload} onClick={handleDownload}>
+            Скачать Excel с паролями ({result.generatedPasswords.length} чел.)
+          </button>
         </div>
       )}
     </div>

@@ -1,4 +1,4 @@
-import { Injectable, BadRequestException, OnModuleInit } from '@nestjs/common';
+import { Injectable, BadRequestException, ForbiddenException, NotFoundException, OnModuleInit } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { LessThan, Repository } from 'typeorm';
 import { Message } from './entities/message.entity';
@@ -203,6 +203,22 @@ export class MessagesService implements OnModuleInit {
   }
 
   async setMessageRelevance(userId: string, messageId: string, isRelevant: boolean) {
+    const message = await this.messageRepo.findOne({ where: { id: messageId } });
+    if (!message) throw new NotFoundException('Сообщение не найдено');
+
+    // Проверяем что пользователь является получателем: прямое сообщение или участник группы
+    let isRecipient = message.recipientId === userId;
+    if (!isRecipient && message.groupId) {
+      const membership = await this.groupRepo
+        .createQueryBuilder('g')
+        .innerJoin('g.members', 'm')
+        .where('g.id = :groupId', { groupId: message.groupId })
+        .andWhere('m.id = :userId', { userId })
+        .getCount();
+      isRecipient = membership > 0;
+    }
+    if (!isRecipient) throw new ForbiddenException('Нет доступа к этому сообщению');
+
     const existing = await this.statusRepo.findOne({ where: { userId, messageId } });
     if (existing) {
       existing.isRelevant = isRelevant;

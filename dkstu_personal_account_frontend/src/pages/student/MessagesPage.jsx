@@ -274,21 +274,30 @@ export default function MessagesPage() {
 
   const handleToggleRelevance = async (msgId, currentIsRelevant) => {
     const newVal = !currentIsRelevant;
+
+    // Оптимистичное удаление из текущего списка
     if (currentIsRelevant) {
       setRelevant((prev) => prev.filter((m) => m.id !== msgId));
     } else {
       setIrrelevant((prev) => ({ ...prev, data: prev.data.filter((m) => m.id !== msgId) }));
     }
+
     try {
       await setMessageRelevance(msgId, newVal);
-    } catch {}
-    loadRelevant();
-    if (currentIsRelevant) {
-      setShowIrrelevant(true);
-      loadIrrelevant(1);
-      setIrrelevantLoaded(true);
-    } else if (irrelevantLoaded) {
-      loadIrrelevant(irrelevant.page);
+      // Перезагружаем только после успешного ответа сервера
+      loadRelevant();
+      if (currentIsRelevant) {
+        setShowIrrelevant(true);
+        loadIrrelevant(1);
+        setIrrelevantLoaded(true);
+      } else if (irrelevantLoaded) {
+        loadIrrelevant(irrelevant.page);
+      }
+    } catch {
+      // Откатываем оптимистичное изменение и показываем ошибку
+      loadRelevant();
+      if (irrelevantLoaded) loadIrrelevant(irrelevant.page);
+      showToast('error', 'Не удалось изменить статус сообщения');
     }
   };
 

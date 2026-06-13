@@ -12,6 +12,7 @@ import {
   UseInterceptors,
   UploadedFile,
   BadRequestException,
+  ParseUUIDPipe,
 } from '@nestjs/common';
 import type { Response } from 'express';
 import { FileInterceptor } from '@nestjs/platform-express';
@@ -32,6 +33,7 @@ export class StudentsController {
 
   // ── Student: profile & group ─────────────────────────────────────────────
 
+  @Roles(Role.STUDENT)
   @Get('me/profile')
   getMyProfile(@Request() req) {
     return this.studentsService.getProfile(req.user.id);
@@ -108,7 +110,7 @@ export class StudentsController {
   @Get('me/portfolio/:id/file')
   serveMyPortfolioFile(
     @Request() req,
-    @Param('id') id: string,
+    @Param('id', ParseUUIDPipe) id: string,
     @Res() res: Response,
     @Query('inline') inline?: string,
   ) {
@@ -187,7 +189,7 @@ export class StudentsController {
 
   @Roles(Role.STUDENT)
   @Delete('me/portfolio/:id')
-  deletePortfolioItem(@Request() req, @Param('id') id: string) {
+  deletePortfolioItem(@Request() req, @Param('id', ParseUUIDPipe) id: string) {
     return this.studentsService.deletePortfolioItem(req.user.id, id);
   }
 
@@ -204,20 +206,20 @@ export class StudentsController {
 
   @Roles(Role.STAFF, Role.ADMIN, Role.TEACHER)
   @Get(':id/profile')
-  getStudentProfile(@Param('id') id: string) {
+  getStudentProfile(@Param('id', ParseUUIDPipe) id: string) {
     return this.studentsService.getStudentProfileById(id);
   }
 
   @Roles(Role.STAFF, Role.ADMIN, Role.TEACHER)
   @Get(':id/grades/all')
-  getStudentAllGrades(@Param('id') id: string) {
+  getStudentAllGrades(@Param('id', ParseUUIDPipe) id: string) {
     return this.studentsService.getLatestGradesPerDiscipline(id);
   }
 
   @Roles(Role.STAFF, Role.ADMIN, Role.TEACHER)
   @Get(':id/grades')
   getStudentGrades(
-    @Param('id') id: string,
+    @Param('id', ParseUUIDPipe) id: string,
     @Query('semester') semester?: string,
   ) {
     return this.studentsService.getGrades(
@@ -228,15 +230,15 @@ export class StudentsController {
 
   @Roles(Role.STAFF, Role.ADMIN, Role.TEACHER)
   @Get(':id/scholarship')
-  getStudentScholarship(@Param('id') id: string) {
+  getStudentScholarship(@Param('id', ParseUUIDPipe) id: string) {
     return this.studentsService.getScholarship(id);
   }
 
   @Roles(Role.STAFF, Role.ADMIN, Role.TEACHER)
   @Get(':studentId/portfolio/:itemId/file')
   serveStudentPortfolioFile(
-    @Param('studentId') studentId: string,
-    @Param('itemId') itemId: string,
+    @Param('studentId', ParseUUIDPipe) studentId: string,
+    @Param('itemId', ParseUUIDPipe) itemId: string,
     @Res() res: Response,
     @Query('inline') inline?: string,
   ) {
@@ -246,7 +248,7 @@ export class StudentsController {
   @Roles(Role.STAFF, Role.ADMIN, Role.TEACHER)
   @Get(':id/portfolio')
   getStudentPortfolio(
-    @Param('id') id: string,
+    @Param('id', ParseUUIDPipe) id: string,
     @Query('category') category?: PortfolioCategory,
   ) {
     return this.studentsService.getPortfolio(id, category);

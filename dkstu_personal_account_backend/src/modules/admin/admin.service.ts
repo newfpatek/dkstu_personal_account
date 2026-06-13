@@ -838,14 +838,6 @@ export class AdminService implements OnModuleInit {
     const group = await this.groupRepo.findOne({ where: { id: dto.groupId } });
     if (!group) throw new NotFoundException('Группа не найдена');
 
-    // Удаляем записи других семестров — один активный семестр на группу
-    await this.groupSemDisciplineRepo
-      .createQueryBuilder()
-      .delete()
-      .where('group_id = :groupId', { groupId: dto.groupId })
-      .andWhere('semester != :semester', { semester: dto.semester })
-      .execute();
-
     let assigned = 0;
     let skipped = 0;
 
@@ -945,6 +937,7 @@ export class AdminService implements OnModuleInit {
       const group = await this.groupRepo.findOne({ where: { name: item.groupName } });
       if (!group) {
         errors.push(`Группа "${item.groupName}" не найдена`);
+        continue;
       }
 
       for (const disc of item.disciplines ?? []) {
@@ -959,8 +952,6 @@ export class AdminService implements OnModuleInit {
             this.disciplineRepo.create({ name: discName, disciplineType: discType }),
           );
         }
-
-        if (!group) { skipped++; continue; }
 
         const exists = await this.groupSemDisciplineRepo.findOne({
           where: { groupId: group.id, disciplineId: discipline.id, semester: item.semester },
@@ -1058,7 +1049,8 @@ export class AdminService implements OnModuleInit {
           continue;
         }
         const plainPassword = rec.password ?? this.generatePassword();
-        const role = Object.values(Role).includes(rec.role as Role) ? (rec.role as Role) : Role.STUDENT;
+        const normalizedRole = this.normalizeRole(rec.role);
+        const role = Object.values(Role).includes(normalizedRole as Role) ? (normalizedRole as Role) : Role.STUDENT;
         const hashed = await bcrypt.hash(plainPassword, 10);
         user = await this.userRepo.save(
           this.userRepo.create({
@@ -1152,7 +1144,8 @@ export class AdminService implements OnModuleInit {
         continue;
       }
       const plainPassword = rec.password ?? this.generatePassword();
-      const role = Object.values(Role).includes(rec.role as Role) ? (rec.role as Role) : Role.STUDENT;
+      const normalizedRole = this.normalizeRole(rec.role);
+      const role = Object.values(Role).includes(normalizedRole as Role) ? (normalizedRole as Role) : Role.STUDENT;
       const hashed = await bcrypt.hash(plainPassword, 10);
       const user = this.userRepo.create({
         fullName: rec.name,
@@ -1280,6 +1273,17 @@ export class AdminService implements OnModuleInit {
       'общественная': 'social',
       'спортивная': 'sports',
       'культурная': 'cultural',
+    };
+    return map[val.trim().toLowerCase()] ?? val.trim();
+  }
+
+  private normalizeRole(val: string | undefined): string | undefined {
+    if (!val) return undefined;
+    const map: Record<string, string> = {
+      'студент': 'student',
+      'преподаватель': 'teacher',
+      'сотрудник': 'staff',
+      'администратор': 'admin',
     };
     return map[val.trim().toLowerCase()] ?? val.trim();
   }

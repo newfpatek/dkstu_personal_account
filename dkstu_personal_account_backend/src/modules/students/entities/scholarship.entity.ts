@@ -25,7 +25,7 @@ export class Scholarship {
   @Column({ name: 'period_start', type: 'date' })
   periodStart!: string;
 
-  @Column({ name: 'period_end', type: 'varchar', nullable: true })
+  @Column({ name: 'period_end', type: 'date', nullable: true })
   periodEnd!: string | null;
 
   @Column({ name: 'is_active', default: true })

@@ -50,18 +50,19 @@ export default function GroupPage() {
                 <tr>
                   <th style={{ width: 40 }}>№</th>
                   <th>ФИО</th>
-                  <th style={{ width: 160 }}>Роль в группе</th>
                 </tr>
               </thead>
               <tbody>
                 {group.members.map((member, idx) => (
                   <tr key={member.id}>
                     <td data-label="№" className={styles.numCell}>{idx + 1}</td>
-                    <td data-label="ФИО">{member.fullName}</td>
-                    <td data-label="Роль в группе">
-                      {member.groupRole && (
-                        <span className={styles.roleTag}>{member.groupRole}</span>
-                      )}
+                    <td data-label="ФИО">
+                      <span className={styles.nameRow}>
+                        {member.fullName}
+                        {member.groupRole && (
+                          <span className={styles.roleTag}>{member.groupRole}</span>
+                        )}
+                      </span>
                     </td>
                   </tr>
                 ))}

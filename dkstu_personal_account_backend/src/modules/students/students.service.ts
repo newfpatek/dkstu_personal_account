@@ -294,7 +294,7 @@ export class StudentsService {
       .where("u.role = 'student'");
 
     if (q) {
-      qb.andWhere('(u.name ILIKE :q OR u.email ILIKE :q)', { q: `%${q}%` });
+      qb.andWhere('(u.name ILIKE :q OR u.email ILIKE :q OR u.phone ILIKE :q)', { q: `%${q}%` });
     }
     if (groupId) {
       qb.andWhere('g.id = :groupId', { groupId });

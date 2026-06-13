@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { getAllGrades, getGpa, getDebts, getMyCurrentSemesterPlan, getMyGroup } from '../../api/students';
 import { calcCurrentSemester } from '../../utils/semester';
 import { useToast } from '../../contexts/ToastContext';
@@ -50,6 +50,7 @@ export default function GradesPage() {
   const [historySemester, setHistorySemester] = useState(null);
   const [historyPlan, setHistoryPlan] = useState(null);
   const [historyPlanLoading, setHistoryPlanLoading] = useState(false);
+  const initialPlanLoaded = useRef(false);
 
   useEffect(() => {
     getMyGroup()
@@ -74,6 +75,7 @@ export default function GradesPage() {
         setGpa(gpaRes.data.gpa);
         setDebts(debtsRes.data);
         setPlan(planRes.data);
+        setHistoryPlan(planRes.data);
         setAllGrades(allRes.data);
       })
       .catch((err) => {
@@ -85,6 +87,10 @@ export default function GradesPage() {
 
   useEffect(() => {
     if (historySemester == null) return;
+    if (!initialPlanLoaded.current) {
+      initialPlanLoaded.current = true;
+      return;
+    }
     setHistoryPlanLoading(true);
     getMyCurrentSemesterPlan(historySemester)
       .then((res) => setHistoryPlan(res.data))
